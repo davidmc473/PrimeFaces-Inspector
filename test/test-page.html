@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>PrimeFaces Inspector – Página de Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f6f9;
+      padding: 30px;
+      color: #333;
+    }
+    h1 { color: #1a5276; }
+    .component {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      transition: all .3s;
+    }
+    .component label { font-weight: 600; margin-right: 10px; }
+    input, select, textarea, button {
+      padding: 8px 14px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+      margin: 4px;
+    }
+    button {
+      background: #2980b9;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover { background: #1a6899; }
+    .status { margin-top: 20px; padding: 12px; background: #d5f5e3; border-radius: 6px; }
+    #dataTable {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #dataTable th, #dataTable td {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    #dataTable th { background: #2980b9; color: #fff; }
+    #dialogOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 1000;
+    }
+    #dialogPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border-radius: 10px;
+      padding: 24px;
+      min-width: 300px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.2);
+    }
+    #dialogPanel h3 { margin-top: 0; }
+    #notificationArea {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+    }
+    .growl-msg {
+      background: #27ae60;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 6px;
+      margin: 4px;
+      animation: fadeInOut 3s ease forwards;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateY(-10px); }
+      10% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    /* Sidebar */
+    #sidebar1 {
+      position: fixed;
+      top: 0; left: -320px;
+      width: 300px; height: 100vh;
+      background: #fff;
+      box-shadow: 2px 0 16px rgba(0,0,0,.15);
+      z-index: 1001;
+      padding: 24px;
+      transition: left .3s ease;
+    }
+    #sidebar1.sidebar-visible { left: 0; }
+    #sidebar1 h3 { margin-top: 0; }
+    /* OverlayPanel */
+    #overlayPanel1 {
+      display: none;
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      z-index: 1001;
+      min-width: 200px;
+    }
+    #overlayPanel1.op-visible { display: block; }
+    /* ConfirmDialog */
+    #confirmDialog1 {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 1002;
+    }
+    #confirmDialog1.cd-visible { display: flex; align-items: center; justify-content: center; }
+    #confirmDialog1 .cd-inner {
+      background: #fff;
+      border-radius: 10px;
+      padding: 24px;
+      min-width: 320px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.2);
+      text-align: center;
+    }
+    #confirmDialog1 .cd-inner h3 { margin-top: 0; color: #e74c3c; }
+  </style>
+</head>
+<body>
+
+<h1>🧪 Página de Test – PrimeFaces Inspector</h1>
+<p>Esta página simula widgets de PrimeFaces para probar la extensión.</p>
+
+<!-- Formulario -->
+<form id="formulario1">
+  <div class="component" id="inputNombre">
+    <label>InputText:</label>
+    <input type="text" placeholder="Nombre" onclick="PrimeFaces.ab({s:'formulario1:inputNombre',f:'formulario1'});return false;">
+  </div>
+
+  <div class="component" id="selectPais">
+    <label>SelectOneMenu:</label>
+    <select>
+      <option>España</option>
+      <option>México</option>
+      <option>Argentina</option>
+    </select>
+  </div>
+
+  <div class="component" id="checkActivo">
+    <label>Checkbox:</label>
+    <input type="checkbox"> Activo
+  </div>
+
+  <div class="component" id="btnGuardar">
+    <button type="button"
+      onclick="PrimeFaces.ab({s:'formulario1:btnGuardar',f:'formulario1',p:'formulario1',u:'formulario1:outputPanel growlWidget'});return false;">
+      💾 Guardar (CommandButton)
+    </button>
+  </div>
+
+  <div class="component" id="btnEliminar">
+    <button type="button"
+      onclick="PrimeFaces.ab({s:'formulario1:btnEliminar',f:'formulario1',p:'@this',u:'formulario1:dataTable1',e:'click',a:true});return false;">
+      🗑️ Eliminar (CommandButton)
+    </button>
+  </div>
+
+  <div class="component" id="outputPanel">
+    <div class="status">OutputPanel – Área de salida actualizable</div>
+  </div>
+</form>
+
+<!-- DataTable -->
+<div class="component" id="dataTable1">
+  <h3>📊 DataTable</h3>
+  <table id="dataTable">
+    <thead><tr><th>ID</th><th>Nombre</th><th>País</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Ana García</td><td>España</td></tr>
+      <tr><td>2</td><td>Carlos López</td><td>México</td></tr>
+      <tr><td>3</td><td>María Rodríguez</td><td>Argentina</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Dialog -->
+<div id="dialogOverlay">
+  <div id="dialogPanel">
+    <h3>🗔 Diálogo de Edición</h3>
+    <p>Contenido del diálogo de ejemplo.</p>
+    <button onclick="document.getElementById('dialogOverlay').style.display='none'">Cerrar</button>
+  </div>
+</div>
+
+<!-- ConfirmDialog -->
+<div id="confirmDialog1">
+  <div class="cd-inner">
+    <h3>❓ Confirmar Acción</h3>
+    <p>¿Estás seguro de que deseas eliminar este registro?</p>
+    <button onclick="document.getElementById('confirmDialog1').classList.remove('cd-visible')">Sí, eliminar</button>
+    <button style="background:#95a5a6;" onclick="document.getElementById('confirmDialog1').classList.remove('cd-visible')">Cancelar</button>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<div id="sidebar1">
+  <h3>📑 Sidebar</h3>
+  <p>Este es un panel lateral de navegación.</p>
+  <ul>
+    <li>Opción 1</li>
+    <li>Opción 2</li>
+    <li>Opción 3</li>
+  </ul>
+  <button onclick="document.getElementById('sidebar1').classList.remove('sidebar-visible')">Cerrar Sidebar</button>
+</div>
+
+<!-- OverlayPanel -->
+<div id="overlayPanel1">
+  <strong>🗗 OverlayPanel</strong>
+  <p>Información adicional disponible aquí.</p>
+</div>
+
+<!-- Growl -->
+<div id="notificationArea"></div>
+
+<!-- TabView -->
+<div class="component" id="tabView1">
+  <h3>📑 TabView</h3>
+  <div style="display:flex;gap:0;">
+    <button style="border-radius:6px 6px 0 0;" onclick="PrimeFaces.ab({s:'tabView1',e:'tabChange',p:'tabView1',u:'tabView1'});return false;">Tab 1</button>
+    <button style="border-radius:6px 6px 0 0; background:#95a5a6;">Tab 2</button>
+    <button style="border-radius:6px 6px 0 0; background:#95a5a6;">Tab 3</button>
+  </div>
+  <div style="border:1px solid #2980b9;padding:16px;border-radius:0 0 8px 8px;">Contenido del Tab 1</div>
+</div>
+
+<!-- AutoComplete -->
+<div class="component" id="autoComplete1">
+  <label>AutoComplete:</label>
+  <input type="text" placeholder="Buscar..."
+    oninput="PrimeFaces.ab({s:'autoComplete1',e:'query',p:'autoComplete1',u:'autoComplete1',d:'300'});return false;">
+</div>
+
+<!-- Calendar -->
+<div class="component" id="calendar1">
+  <label>Calendar:</label>
+  <input type="date">
+</div>
+
+<hr>
+<h2>Acciones de test</h2>
+<button onclick="simulateAjaxUpdate()">🔄 Simular Ajax Update (fucsia)</button>
+<button onclick="simulateAjaxProcess()">🟢 Simular Ajax Process (verde)</button>
+<button onclick="document.getElementById('dialogOverlay').style.display='block'">🗔 Abrir Diálogo</button>
+<button onclick="document.getElementById('confirmDialog1').classList.add('cd-visible')">❓ Abrir ConfirmDialog</button>
+<button onclick="document.getElementById('sidebar1').classList.add('sidebar-visible')">📑 Abrir Sidebar</button>
+<button onclick="toggleOverlayPanel(this)">🗗 Toggle OverlayPanel</button>
+<button onclick="showGrowl()">🔔 Mostrar Growl</button>
+
+<script>
+  /**
+   * Simulación de PrimeFaces global para testing
+   */
+  window.PrimeFaces = {
+    widgets: {},
+    ab: function(cfg) {
+      console.log('[PF.ab]', cfg);
+    },
+    ajax: {
+      Response: {
+        handle: function() {}
+      }
+    }
+  };
+
+  // Clase base widget simulada
+  class BaseWidget {
+    constructor(cfg) {
+      this.cfg = cfg;
+      this.id = cfg.id;
+    }
+    getJQ() { return document.getElementById(this.id); }
+    disable() { console.log(this.cfg.widgetVar + '.disable()'); }
+    enable() { console.log(this.cfg.widgetVar + '.enable()'); }
+    refresh() { console.log(this.cfg.widgetVar + '.refresh()'); showGrowl('refresh() ejecutado en ' + this.cfg.widgetVar); }
+    destroy() {}
+    isDisabled() { return false; }
+  }
+
+  class DataTable extends BaseWidget {
+    filter() {}
+    sort() {}
+    paginate() {}
+    clearFilters() {}
+    selectRow() {}
+    unselectRow() {}
+    selectAllRows() {}
+    getSelectedRowsCount() { return 0; }
+  }
+
+  class CommandButton extends BaseWidget {
+    click() {}
+    disable() {}
+    enable() {}
+  }
+
+  class InputText extends BaseWidget {
+    getValue() { return ''; }
+    setValue(v) {}
+    clear() {}
+    focus() {}
+    select() {}
+  }
+
+  class SelectOneMenu extends BaseWidget {
+    getValue() { return ''; }
+    setValue(v) {}
+    selectValue(v) {}
+    getSelectedLabel() { return ''; }
+    show() {}
+    hide() {}
+  }
+
+  class SelectBooleanCheckbox extends BaseWidget {
+    check() {}
+    uncheck() {}
+    toggle() {}
+    isChecked() { return false; }
+  }
+
+  class Dialog extends BaseWidget {
+    show() {
+      console.log(this.cfg.widgetVar + '.show()');
+      document.getElementById('dialogOverlay').style.display = 'block';
+      showGrowl('show() ejecutado en ' + this.cfg.widgetVar);
+    }
+    hide() {
+      console.log(this.cfg.widgetVar + '.hide()');
+      document.getElementById('dialogOverlay').style.display = 'none';
+      showGrowl('hide() ejecutado en ' + this.cfg.widgetVar);
+    }
+    isVisible() { return document.getElementById('dialogOverlay').style.display !== 'none'; }
+    initPosition() {}
+    moveToTop() {}
+    toggleMaximize() {}
+  }
+
+  class ConfirmDialog extends BaseWidget {
+    show() {
+      console.log(this.cfg.widgetVar + '.show()');
+      document.getElementById('confirmDialog1').classList.add('cd-visible');
+      showGrowl('show() ejecutado en ' + this.cfg.widgetVar);
+    }
+    hide() {
+      console.log(this.cfg.widgetVar + '.hide()');
+      document.getElementById('confirmDialog1').classList.remove('cd-visible');
+      showGrowl('hide() ejecutado en ' + this.cfg.widgetVar);
+    }
+    isVisible() { return document.getElementById('confirmDialog1').classList.contains('cd-visible'); }
+  }
+
+  class Sidebar extends BaseWidget {
+    show() {
+      console.log(this.cfg.widgetVar + '.show()');
+      document.getElementById('sidebar1').classList.add('sidebar-visible');
+      showGrowl('show() ejecutado en ' + this.cfg.widgetVar);
+    }
+    hide() {
+      console.log(this.cfg.widgetVar + '.hide()');
+      document.getElementById('sidebar1').classList.remove('sidebar-visible');
+      showGrowl('hide() ejecutado en ' + this.cfg.widgetVar);
+    }
+    toggle() {
+      console.log(this.cfg.widgetVar + '.toggle()');
+      document.getElementById('sidebar1').classList.toggle('sidebar-visible');
+      showGrowl('toggle() ejecutado en ' + this.cfg.widgetVar);
+    }
+    isVisible() { return document.getElementById('sidebar1').classList.contains('sidebar-visible'); }
+  }
+
+  class OverlayPanel extends BaseWidget {
+    show() {
+      console.log(this.cfg.widgetVar + '.show()');
+      const el = document.getElementById('overlayPanel1');
+      el.classList.add('op-visible');
+      el.style.top = '400px';
+      el.style.left = '200px';
+      showGrowl('show() ejecutado en ' + this.cfg.widgetVar);
+    }
+    hide() {
+      console.log(this.cfg.widgetVar + '.hide()');
+      document.getElementById('overlayPanel1').classList.remove('op-visible');
+      showGrowl('hide() ejecutado en ' + this.cfg.widgetVar);
+    }
+    toggle() {
+      console.log(this.cfg.widgetVar + '.toggle()');
+      document.getElementById('overlayPanel1').classList.toggle('op-visible');
+    }
+    isVisible() { return document.getElementById('overlayPanel1').classList.contains('op-visible'); }
+  }
+
+  class TabView extends BaseWidget {
+    select(index) {}
+    disable(index) {}
+    enable(index) {}
+    getActiveIndex() { return 0; }
+    getLength() { return 0; }
+  }
+
+  class AutoComplete extends BaseWidget {
+    search(query) {}
+    clear() {
+      console.log(this.cfg.widgetVar + '.clear()');
+      const input = document.querySelector('#autoComplete1 input');
+      if (input) input.value = '';
+      showGrowl('clear() ejecutado en ' + this.cfg.widgetVar);
+    }
+    close() {
+      console.log(this.cfg.widgetVar + '.close()');
+      showGrowl('close() ejecutado en ' + this.cfg.widgetVar);
+    }
+    deactivate() {}
+    activate() {}
+  }
+
+  class Calendar extends BaseWidget {
+    getDate() { return new Date(); }
+    setDate(date) {}
+    clear() {}
+    show() {}
+    hide() {}
+  }
+
+  class OutputPanel extends BaseWidget {
+    update() {}
+  }
+
+  class Growl extends BaseWidget {
+    show(msgs) {}
+    removeAll() {}
+  }
+
+  // Registrar widgets
+  const widgetDefs = [
+    { var: 'inputNombreWidget', cls: InputText, id: 'inputNombre' },
+    { var: 'selectPaisWidget', cls: SelectOneMenu, id: 'selectPais' },
+    { var: 'checkActivoWidget', cls: SelectBooleanCheckbox, id: 'checkActivo' },
+    { var: 'btnGuardarWidget', cls: CommandButton, id: 'btnGuardar' },
+    { var: 'btnEliminarWidget', cls: CommandButton, id: 'btnEliminar', target: 'dataTable1' },
+    { var: 'outputPanelWidget', cls: OutputPanel, id: 'outputPanel' },
+    { var: 'dataTableWidget', cls: DataTable, id: 'dataTable1' },
+    { var: 'dialogWidget', cls: Dialog, id: 'dialogOverlay', target: 'dialogPanel' },
+    { var: 'confirmDialogWidget', cls: ConfirmDialog, id: 'confirmDialog1' },
+    { var: 'sidebarWidget', cls: Sidebar, id: 'sidebar1' },
+    { var: 'overlayPanelWidget', cls: OverlayPanel, id: 'overlayPanel1' },
+    { var: 'tabViewWidget', cls: TabView, id: 'tabView1' },
+    { var: 'autoCompleteWidget', cls: AutoComplete, id: 'autoComplete1' },
+    { var: 'calendarWidget', cls: Calendar, id: 'calendar1' },
+    { var: 'growlWidget', cls: Growl, id: 'notificationArea' }
+  ];
+
+  widgetDefs.forEach(def => {
+    const cfg = { id: def.id, widgetVar: def.var };
+    if (def.target) cfg.target = def.target;
+    const w = new def.cls(cfg);
+    PrimeFaces.widgets[def.var] = w;
+  });
+
+  // Funciones de test
+  function simulateAjaxUpdate() {
+    window.postMessage({
+      type: 'PF_INSPECTOR_UPDATE',
+      data: ['outputPanel', 'dataTable1']
+    }, '*');
+  }
+
+  function simulateAjaxProcess() {
+    window.postMessage({
+      type: 'PF_INSPECTOR_AJAX',
+      data: { source: 'btnGuardar', formId: 'formulario1', process: 'formulario1', update: 'outputPanel' }
+    }, '*');
+  }
+
+  function toggleOverlayPanel(btn) {
+    const op = document.getElementById('overlayPanel1');
+    op.classList.toggle('op-visible');
+    if (op.classList.contains('op-visible')) {
+      const rect = btn.getBoundingClientRect();
+      op.style.top = (rect.bottom + 8) + 'px';
+      op.style.left = rect.left + 'px';
+    }
+  }
+
+  function showGrowl(text) {
+    const area = document.getElementById('notificationArea');
+    const msg = document.createElement('div');
+    msg.className = 'growl-msg';
+    msg.textContent = text || '✓ Operación realizada con éxito';
+    area.appendChild(msg);
+    setTimeout(() => msg.remove(), 3500);
+  }
+</script>
+
+</body>
+</html>

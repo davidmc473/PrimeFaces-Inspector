@@ -1,0 +1,786 @@
+/* ═══════════════════════════════════════════════════════════
+   PrimeFaces Inspector – Estilos del panel y highlights
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Panel principal ── */
+#pf-inspector-panel {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 380px;
+  max-height: calc(100vh - 20px);
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  z-index: 2147483647;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: #ddd;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity .2s;
+}
+#pf-inspector-panel * {
+  box-sizing: border-box;
+}
+
+/* ── Header ── */
+.pfi-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #16213e, #1a1a2e);
+  border-bottom: 1px solid #2a2a4a;
+  flex-shrink: 0;
+}
+.pfi-header .pfi-logo {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.pfi-header .pfi-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #00d4ff;
+  white-space: nowrap;
+}
+.pfi-header .pfi-count {
+  font-size: 11px;
+  color: #888;
+  margin-right: 4px;
+}
+.pfi-header-btn {
+  background: none;
+  border: 1px solid #333;
+  border-radius: 5px;
+  color: #aaa;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .15s;
+  padding: 0;
+}
+.pfi-header-btn:hover {
+  background: #2a2a4a;
+  color: #00d4ff;
+  border-color: #00d4ff55;
+}
+
+/* ── Botón activo (modo selección) ── */
+.pfi-header-btn.pfi-btn-active {
+  background: #0090ff;
+  color: #fff;
+  border-color: #00d4ff;
+  box-shadow: 0 0 8px rgba(0,144,255,.4);
+}
+.pfi-header-btn.pfi-btn-active:hover {
+  background: #007ae6;
+}
+
+/* ── Barra de búsqueda y filtro ── */
+.pfi-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #16213e;
+  border-bottom: 1px solid #2a2a4a;
+  flex-shrink: 0;
+}
+.pfi-search {
+  flex: 1;
+  background: #0f0f23;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #ddd;
+  font-size: 12px;
+  outline: none;
+  transition: border-color .2s;
+}
+.pfi-search:focus {
+  border-color: #00d4ff;
+}
+.pfi-search::placeholder {
+  color: #555;
+}
+.pfi-filter {
+  background: #0f0f23;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: #ddd;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  max-width: 120px;
+}
+.pfi-filter:focus {
+  border-color: #00d4ff;
+}
+
+/* ── Lista de widgets ── */
+.pfi-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  min-height: 60px;
+  max-height: calc(100vh - 160px);
+}
+.pfi-list::-webkit-scrollbar {
+  width: 5px;
+}
+.pfi-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pfi-list::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+/* ── Tarjeta de widget ── */
+.pfi-card {
+  background: #0f0f23;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pfi-card:hover {
+  border-color: #00d4ff55;
+  background: #16213e;
+}
+.pfi-card-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #0090ff33, #00d4ff22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  color: #00d4ff;
+}
+.pfi-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.pfi-card-wvar {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pfi-card-id {
+  font-size: 10px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* ── Tarjeta seleccionada (modo selección hover) ── */
+.pfi-card-selected {
+  border-color: #00d4ff !important;
+  background: #16213e !important;
+  box-shadow: 0 0 8px rgba(0,212,255,.2);
+}
+
+/* ── Mensaje vacío ── */
+.pfi-empty {
+  text-align: center;
+  padding: 30px 16px;
+  color: #555;
+  font-size: 12px;
+}
+
+/* ── Panel de detalle ── */
+.pfi-detail-overlay {
+  position: absolute;
+  inset: 0;
+  background: #1a1a2eF0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pfi-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2a4a;
+  flex-shrink: 0;
+}
+.pfi-detail-header .pfi-back-btn {
+  background: none;
+  border: 1px solid #333;
+  border-radius: 5px;
+  color: #aaa;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all .15s;
+  padding: 0;
+}
+.pfi-detail-header .pfi-back-btn:hover {
+  background: #2a2a4a;
+  color: #00d4ff;
+}
+.pfi-detail-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #00d4ff;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pfi-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.pfi-detail-body::-webkit-scrollbar {
+  width: 5px;
+}
+.pfi-detail-body::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.pfi-detail-section {
+  margin-bottom: 14px;
+}
+.pfi-detail-section h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #00d4ff;
+  margin: 0 0 6px 0;
+  letter-spacing: .5px;
+}
+.pfi-detail-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+.pfi-detail-label {
+  color: #888;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.pfi-detail-value {
+  color: #e0e0e0;
+  word-break: break-all;
+}
+.pfi-detail-value.pfi-target-link {
+  color: #ffab40;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.pfi-detail-value.pfi-target-link:hover {
+  color: #ffd180;
+}
+
+/* Client API */
+.pfi-api-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pfi-api-tag {
+  background: #0090ff22;
+  border: 1px solid #0090ff44;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: #5cc8ff;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* ── Botones de acción del Client API ── */
+.pfi-actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pfi-action-btn {
+  background: linear-gradient(135deg, #0090ff22, #00d4ff11);
+  border: 1px solid #0090ff44;
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #5cc8ff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Consolas', 'Courier New', monospace;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.pfi-action-btn:hover {
+  background: linear-gradient(135deg, #0090ff44, #00d4ff33);
+  border-color: #00d4ff;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0,144,255,.25);
+}
+.pfi-action-btn:active {
+  transform: scale(.96);
+}
+.pfi-action-btn .pfi-action-icon {
+  font-size: 13px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Toast de resultado de acción ── */
+.pfi-action-toast {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  margin-top: 8px;
+  animation: pfi-toast-fade 2.5s ease forwards;
+}
+.pfi-action-toast.pfi-toast-ok {
+  background: #0a2e1a;
+  border: 1px solid #1b5e20;
+  color: #66bb6a;
+}
+.pfi-action-toast.pfi-toast-err {
+  background: #2e0a0a;
+  border: 1px solid #5e1b1b;
+  color: #ef5350;
+}
+@keyframes pfi-toast-fade {
+  0% { opacity: 0; transform: translateY(-4px); }
+  10% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Eventos */
+.pfi-event-block {
+  background: #0f0f23;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+.pfi-event-name {
+  font-weight: 700;
+  color: #ff6b9d;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.pfi-event-raw {
+  font-size: 10px;
+  color: #555;
+  word-break: break-all;
+  margin-bottom: 6px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  padding: 4px;
+  background: #0a0a1a;
+  border-radius: 3px;
+  max-height: 60px;
+  overflow-y: auto;
+}
+.pfi-param-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.pfi-param-table th {
+  text-align: left;
+  color: #888;
+  border-bottom: 1px solid #2a2a4a;
+  padding: 3px 4px;
+  font-weight: 600;
+  font-size: 10px;
+}
+.pfi-param-table td {
+  padding: 3px 4px;
+  border-bottom: 1px solid #1a1a2e;
+  color: #ccc;
+}
+.pfi-param-table td:first-child {
+  color: #ffab40;
+  font-weight: 700;
+  font-family: 'Consolas', monospace;
+}
+.pfi-param-table td:nth-child(2) {
+  color: #5cc8ff;
+}
+.pfi-param-table td:last-child {
+  color: #aaa;
+  font-family: 'Consolas', monospace;
+  word-break: break-all;
+}
+
+/* ── Panel de configuración ── */
+.pfi-config-overlay {
+  position: absolute;
+  inset: 0;
+  background: #1a1a2eF0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+}
+.pfi-config-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.pfi-config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #2a2a4a;
+}
+.pfi-config-item label {
+  font-size: 12px;
+  color: #ccc;
+}
+.pfi-config-item .pfi-desc {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+/* Toggle switch */
+.pfi-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.pfi-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.pfi-toggle .pfi-slider {
+  position: absolute;
+  inset: 0;
+  background: #333;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: .2s;
+}
+.pfi-toggle .pfi-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: #888;
+  border-radius: 50%;
+  transition: .2s;
+}
+.pfi-toggle input:checked + .pfi-slider {
+  background: #0090ff;
+}
+.pfi-toggle input:checked + .pfi-slider::before {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+/* ═══════════════════════════════════════════
+   Highlights (bordes y overlay)
+   ═══════════════════════════════════════════ */
+
+/* Hover desde tarjeta — cian */
+.pfi-highlight-hover {
+  outline: 2px solid #00d4ff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgba(0,212,255,.35) !important;
+  transition: outline .15s, box-shadow .15s !important;
+}
+
+/* Target hover — naranja */
+.pfi-highlight-target {
+  outline: 2px dashed #ffab40 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgba(255,171,64,.35) !important;
+  transition: outline .15s, box-shadow .15s !important;
+}
+
+/* Update/Reemplazo — fucsia */
+@keyframes pfi-flash-fuchsia {
+  0% { background-color: rgba(255,0,170,.18); box-shadow: inset 0 0 0 2px rgba(180,0,120,.7); }
+  100% { background-color: transparent; box-shadow: inset 0 0 0 2px transparent; }
+}
+.pfi-highlight-update {
+  animation: pfi-flash-fuchsia .8s ease-out forwards !important;
+}
+
+/* Process Ajax — verde */
+@keyframes pfi-flash-green {
+  0% { background-color: rgba(0,200,80,.18); box-shadow: inset 0 0 0 2px rgba(0,140,60,.7); }
+  100% { background-color: transparent; box-shadow: inset 0 0 0 2px transparent; }
+}
+.pfi-highlight-process {
+  animation: pfi-flash-green .8s ease-out forwards !important;
+}
+
+/* ═══════════════════════════════════════════
+   Modo Selección
+   ═══════════════════════════════════════════ */
+
+/* Candidato — contorno sutil en todos los widgets cuando el modo selección está activo */
+.pfi-selection-candidate {
+  outline: 2px dashed #00d4ff66 !important;
+  outline-offset: 1px !important;
+  cursor: crosshair !important;
+  transition: outline .15s, box-shadow .15s !important;
+}
+.pfi-selection-candidate:hover {
+  outline: 2px solid #00d4ff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 16px rgba(0,212,255,.4) !important;
+  z-index: 999999 !important;
+  position: relative;
+}
+
+/* ── Drag handle ── */
+.pfi-drag-handle {
+  cursor: move;
+  user-select: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TEMA CLARO – .pfi-theme-light
+   ═══════════════════════════════════════════════════════════ */
+
+/* Panel principal */
+#pf-inspector-panel.pfi-theme-light {
+  background: #ffffff;
+  border-color: #d0d5dd;
+  color: #333;
+  box-shadow: 0 8px 32px rgba(0,0,0,.12);
+}
+
+/* Header */
+.pfi-theme-light .pfi-header {
+  background: linear-gradient(135deg, #f0f5ff, #ffffff);
+  border-bottom-color: #d0d5dd;
+}
+.pfi-theme-light .pfi-title {
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-count {
+  color: #999;
+}
+.pfi-theme-light .pfi-header-btn {
+  border-color: #ccc;
+  color: #666;
+}
+.pfi-theme-light .pfi-header-btn:hover {
+  background: #eef3ff;
+  color: #0070cc;
+  border-color: #0070cc55;
+}
+.pfi-theme-light .pfi-header-btn.pfi-btn-active {
+  background: #0070cc;
+  color: #fff;
+  border-color: #0070cc;
+}
+
+/* Toolbar */
+.pfi-theme-light .pfi-toolbar {
+  background: #f8f9fc;
+  border-bottom-color: #d0d5dd;
+}
+.pfi-theme-light .pfi-search {
+  background: #fff;
+  border-color: #ccc;
+  color: #333;
+}
+.pfi-theme-light .pfi-search::placeholder {
+  color: #aaa;
+}
+.pfi-theme-light .pfi-search:focus {
+  border-color: #0070cc;
+}
+.pfi-theme-light .pfi-filter {
+  background: #fff;
+  border-color: #ccc;
+  color: #333;
+}
+.pfi-theme-light .pfi-filter:focus {
+  border-color: #0070cc;
+}
+
+/* scrollbar light */
+.pfi-theme-light .pfi-list::-webkit-scrollbar-thumb,
+.pfi-theme-light .pfi-detail-body::-webkit-scrollbar-thumb {
+  background: #ccc;
+}
+
+/* Cards */
+.pfi-theme-light .pfi-card {
+  background: #f5f7fa;
+  border-color: #dde2ea;
+}
+.pfi-theme-light .pfi-card:hover {
+  background: #e8f0ff;
+  border-color: #0070cc44;
+}
+.pfi-theme-light .pfi-card-icon {
+  background: linear-gradient(135deg, #0070cc22, #00aaff15);
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-card-wvar {
+  color: #222;
+}
+.pfi-theme-light .pfi-card-id {
+  color: #999;
+}
+.pfi-theme-light .pfi-card-selected {
+  border-color: #0070cc !important;
+  background: #e0ecff !important;
+  box-shadow: 0 0 8px rgba(0,112,204,.15);
+}
+
+/* Empty */
+.pfi-theme-light .pfi-empty {
+  color: #aaa;
+}
+
+/* Detail overlay */
+.pfi-theme-light .pfi-detail-overlay {
+  background: #fffffff0;
+}
+.pfi-theme-light .pfi-detail-header {
+  border-bottom-color: #d0d5dd;
+}
+.pfi-theme-light .pfi-back-btn {
+  border-color: #ccc;
+  color: #666;
+}
+.pfi-theme-light .pfi-back-btn:hover {
+  background: #eef3ff;
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-detail-title {
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-detail-section h4 {
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-detail-label {
+  color: #888;
+}
+.pfi-theme-light .pfi-detail-value {
+  color: #333;
+}
+.pfi-theme-light .pfi-detail-value.pfi-target-link {
+  color: #e67700;
+}
+.pfi-theme-light .pfi-detail-value.pfi-target-link:hover {
+  color: #cc6600;
+}
+
+/* API tags light */
+.pfi-theme-light .pfi-api-tag {
+  background: #0070cc12;
+  border-color: #0070cc33;
+  color: #0070cc;
+}
+
+/* Action buttons light */
+.pfi-theme-light .pfi-action-btn {
+  background: linear-gradient(135deg, #0070cc15, #00aaff0a);
+  border-color: #0070cc33;
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-action-btn:hover {
+  background: linear-gradient(135deg, #0070cc33, #00aaff22);
+  border-color: #0070cc;
+  color: #004c99;
+  box-shadow: 0 0 8px rgba(0,112,204,.15);
+}
+
+/* Action toast light */
+.pfi-theme-light .pfi-action-toast.pfi-toast-ok {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #2e7d32;
+}
+.pfi-theme-light .pfi-action-toast.pfi-toast-err {
+  background: #ffebee;
+  border-color: #ef9a9a;
+  color: #c62828;
+}
+
+/* Events light */
+.pfi-theme-light .pfi-event-block {
+  background: #f5f7fa;
+  border-color: #dde2ea;
+}
+.pfi-theme-light .pfi-event-name {
+  color: #d63384;
+}
+.pfi-theme-light .pfi-event-raw {
+  background: #eee;
+  color: #666;
+}
+.pfi-theme-light .pfi-param-table th {
+  color: #888;
+  border-bottom-color: #dde2ea;
+}
+.pfi-theme-light .pfi-param-table td {
+  border-bottom-color: #f0f0f0;
+  color: #555;
+}
+.pfi-theme-light .pfi-param-table td:first-child {
+  color: #e67700;
+}
+.pfi-theme-light .pfi-param-table td:nth-child(2) {
+  color: #0070cc;
+}
+.pfi-theme-light .pfi-param-table td:last-child {
+  color: #666;
+}
+
+/* Config overlay light */
+.pfi-theme-light .pfi-config-overlay {
+  background: #fffffff0;
+}
+.pfi-theme-light .pfi-config-item {
+  border-bottom-color: #dde2ea;
+}
+.pfi-theme-light .pfi-config-item label {
+  color: #333;
+}
+.pfi-theme-light .pfi-config-item .pfi-desc {
+  color: #999;
+}
+.pfi-theme-light .pfi-toggle .pfi-slider {
+  background: #ccc;
+}
+.pfi-theme-light .pfi-toggle .pfi-slider::before {
+  background: #fff;
+}
