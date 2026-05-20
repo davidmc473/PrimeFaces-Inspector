@@ -1,1 +1,1 @@
-# primefaces-chrome-extension
+# PrimeFaces Inspector
