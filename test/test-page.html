@@ -138,12 +138,18 @@
 
 <!-- Formulario -->
 <form id="formulario1">
-  <div class="component" id="inputNombre">
+  <div class="component" id="inputNombre"
+       onclick="PrimeFaces.ab({s:'formulario1:inputNombre',f:'formulario1'});return false;"
+       onchange="PrimeFaces.ab({s:'formulario1:inputNombre',f:'formulario1',e:'change',p:'@this'});return false;"
+       onkeyup="console.log('keyup en inputNombre');"
+       onfocus="console.log('focus en inputNombre');">
     <label>InputText:</label>
-    <input type="text" placeholder="Nombre" onclick="PrimeFaces.ab({s:'formulario1:inputNombre',f:'formulario1'});return false;">
+    <input type="text" placeholder="Nombre">
   </div>
 
-  <div class="component" id="selectPais">
+  <div class="component" id="selectPais"
+       onchange="PrimeFaces.ab({s:'formulario1:selectPais',f:'formulario1',e:'change',p:'@this',u:'outputPanel'});return false;"
+       onmouseover="console.log('hover en selectPais');">
     <label>SelectOneMenu:</label>
     <select>
       <option>España</option>
@@ -268,6 +274,7 @@
    * Simulación de PrimeFaces global para testing
    */
   window.PrimeFaces = {
+    VERSION: '14.0.0',
     widgets: {},
     ab: function(cfg) {
       console.log('[PF.ab]', cfg);
