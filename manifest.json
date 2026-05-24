@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PrimeFaces Inspector",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Inspect PrimeFaces widgets: list, search, filter, Client API, events and Ajax monitoring.",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {

@@ -31,12 +31,15 @@
     collapse: 'Contraer',
 
     sectionInfo: 'Información general',
+    sectionMetadata: 'Metadatos',
     sectionTarget: 'Target',
     sectionActions: 'Acciones',
     sectionClientApi: 'Client API',
     sectionEvents: 'Eventos',
     eventsEmpty: 'Sin eventos detectados.',
     eventsJqueryDisabled: 'Eventos jQuery desactivados en la configuración.',
+    apiNeedsArgs: 'requiere argumentos',
+    btnExecEvent: 'Ejecutar este evento',
 
     labelWidgetVar: 'widgetVar',
     labelId: 'ID',
@@ -48,8 +51,31 @@
     thValue: 'Valor',
     sourceInline: 'inline',
     sourceJquery: 'jQuery',
-    execOk: '✓ {0}.{1}() ejecutado',
+    execOk: "✓ PF('{0}').{1}() ejecutado",
+    execOkResult: "✓ PF('{0}').{1}() → {2}",
     execErr: '✗ Error: {0}',
+    openConfig: 'Abrir configuración',
+    disabledAlready: 'el widget ya está deshabilitado',
+    enabledAlready: 'el widget ya está habilitado',
+    shownAlready: 'el widget ya es visible',
+    hiddenAlready: 'el widget ya está oculto',
+
+    // Toasts y modal de resultados
+    viewFull: 'Ver completo',
+    resultTitle: 'Resultado',
+    copyResult: 'Copiar resultado',
+    copied: '✓ Copiado al portapapeles',
+
+    // Mini-formulario de Client API con argumentos
+    apiOpenForm: 'Abrir formulario para {0}() con {1} argumento(s)',
+    argPlaceholder: "p.ej. 2, 'texto', true, [1,2]",
+    argHint: 'Introduce JSON válido o texto plano. Vacío = omitir argumento.',
+    btnExec: 'Ejecutar',
+    btnCancel: 'Cancelar',
+    executing: 'Ejecutando…',
+    returnedValue: 'Valor devuelto',
+
+
 
     cfgTitle: 'Configuración',
     cfgTheme: 'Tema claro',

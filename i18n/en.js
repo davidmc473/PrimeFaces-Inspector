@@ -31,12 +31,15 @@
     collapse: 'Collapse',
 
     sectionInfo: 'General information',
+    sectionMetadata: 'Metadata',
     sectionTarget: 'Target',
     sectionActions: 'Actions',
     sectionClientApi: 'Client API',
     sectionEvents: 'Events',
     eventsEmpty: 'No events detected.',
     eventsJqueryDisabled: 'jQuery events disabled in settings.',
+    apiNeedsArgs: 'requires arguments',
+    btnExecEvent: 'Execute this event',
 
     labelWidgetVar: 'widgetVar',
     labelId: 'ID',
@@ -48,8 +51,31 @@
     thValue: 'Value',
     sourceInline: 'inline',
     sourceJquery: 'jQuery',
-    execOk: '✓ {0}.{1}() executed',
+    execOk: "✓ PF('{0}').{1}() executed",
+    execOkResult: "✓ PF('{0}').{1}() → {2}",
     execErr: '✗ Error: {0}',
+    openConfig: 'Open settings',
+    disabledAlready: 'widget is already disabled',
+    enabledAlready: 'widget is already enabled',
+    shownAlready: 'widget is already visible',
+    hiddenAlready: 'widget is already hidden',
+
+    // Toasts and result modal
+    viewFull: 'View full',
+    resultTitle: 'Result',
+    copyResult: 'Copy result',
+    copied: '✓ Copied to clipboard',
+
+    // Client API mini-form for methods that need arguments
+    apiOpenForm: 'Open form for {0}() with {1} argument(s)',
+    argPlaceholder: "e.g. 2, 'text', true, [1,2]",
+    argHint: 'Enter valid JSON or plain text. Empty = skip argument.',
+    btnExec: 'Execute',
+    btnCancel: 'Cancel',
+    executing: 'Executing…',
+    returnedValue: 'Returned value',
+
+
 
     cfgTitle: 'Settings',
     cfgTheme: 'Light theme',

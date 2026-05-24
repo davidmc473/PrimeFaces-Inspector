@@ -85,12 +85,14 @@
   const COMPONENT_ICONS = {
     DataTable: '📊', CommandButton: '🔘', CommandLink: '🔗',
     Dialog: '🗔', Panel: '📋', TabView: '📑',
+    InputNumber: '🔢', InputMask: '🎭',
     InputText: '✏️', InputTextarea: '📝', Calendar: '📅',
+    DatePicker: '📅', TimePicker: '⏰',
     SelectOneMenu: '📃', SelectBooleanCheckbox: '☑️', SelectManyCheckbox: '☑️',
     AutoComplete: '🔍', FileUpload: '📁', Tree: '🌳',
     TreeTable: '🌲', AccordionPanel: '📂', Menu: '☰',
     Menubar: '☰', ContextMenu: '📋', Growl: '🔔',
-    Messages: '💬', OverlayPanel: '🗗', Tooltip: '💡',
+    Messages: '💬', Message: '💬', OverlayPanel: '🗗', Tooltip: '💡',
     ProgressBar: '📊', Chart: '📈', Schedule: '📆',
     Carousel: '🎠', Galleria: '🖼️', Editor: '📝',
     Spinner: '🔢', Slider: '🎚️', Rating: '⭐',
@@ -103,23 +105,45 @@
     Default: '🧩'
   };
 
+  // Orden por longitud descendente para que coincidencias largas (InputNumber,
+  // InputTextarea, ConfirmDialog) ganen sobre cortas (InputText, Dialog).
+  const COMPONENT_ICON_KEYS = Object.keys(COMPONENT_ICONS)
+    .filter(k => k !== 'Default')
+    .sort((a, b) => b.length - a.length);
+
   function getIcon(type) {
-    for (const [key, icon] of Object.entries(COMPONENT_ICONS)) {
-      if (type && type.toLowerCase().includes(key.toLowerCase())) return icon;
+    if (!type) return COMPONENT_ICONS.Default;
+    const low = type.toLowerCase();
+    for (const key of COMPONENT_ICON_KEYS) {
+      if (low.includes(key.toLowerCase())) return COMPONENT_ICONS[key];
     }
     return COMPONENT_ICONS.Default;
   }
+
 
   /* ══════════════════════════════════════════
      Acciones de Client API por tipo de widget
      ══════════════════════════════════════════ */
   const ACTION_ICONS = {
-    refresh: '🔄', clear: '🧹', close: '✖',
-    show: '👁', hide: '🙈', toggle: '🔀'
+    clear: '🧹', close: '✖',
+    show: '👁', hide: '🙈', toggle: '🔀',
+    enable: '✓', disable: '⊘',
+    focus: '🎯', blur: '🌫',
+    select: '☑', unselect: '☐',
+    selectAll: '☑☑', unselectAll: '☐☐',
+    open: '📂', expand: '⤢', collapse: '⤡',
+    reset: '↺', reload: '🔁', play: '▶', pause: '⏸', stop: '⏹',
+    next: '⏭', prev: '⏮', first: '⏮', last: '⏭',
+    showAll: '👁', hideAll: '🙈'
   };
 
+  /**
+   * Devuelve la lista de acciones "destacadas" para un tipo concreto.
+   * NOTA: además de éstas, el detalle muestra como botones todos los métodos
+   *       del Client API que sean ejecutables (arity 0 y no destructivos).
+   */
   function getActionsForType(type) {
-    const actions = ['refresh'];
+    const actions = [];
     if (!type) return actions;
     const ty = type.toLowerCase();
     if (ty.includes('autocomplete')) {
@@ -132,6 +156,38 @@
       actions.push('show', 'hide', 'toggle');
     }
     return actions;
+  }
+
+  /** Devuelve un icono apropiado para un método del Client API */
+  function getActionIcon(name) {
+    if (ACTION_ICONS[name]) return ACTION_ICONS[name];
+    const low = name.toLowerCase();
+    if (low.startsWith('show')) return '👁';
+    if (low.startsWith('hide')) return '🙈';
+    if (low.startsWith('toggle')) return '🔀';
+    if (low.startsWith('clear') || low.startsWith('reset')) return '🧹';
+    if (low.startsWith('enable')) return '✓';
+    if (low.startsWith('disable')) return '⊘';
+    if (low.startsWith('select')) return '☑';
+    if (low.startsWith('unselect') || low.startsWith('deselect')) return '☐';
+    if (low.startsWith('open')) return '📂';
+    if (low.startsWith('close')) return '✖';
+    if (low.startsWith('expand')) return '⤢';
+    if (low.startsWith('collapse')) return '⤡';
+    if (low.startsWith('focus')) return '🎯';
+    if (low.startsWith('blur')) return '🌫';
+    if (low.startsWith('refresh') || low.startsWith('reload') || low.startsWith('update')) return '🔁';
+    if (low.startsWith('next') || low.startsWith('forward')) return '⏭';
+    if (low.startsWith('prev') || low.startsWith('back')) return '⏮';
+    if (low.startsWith('save')) return '💾';
+    if (low.startsWith('load')) return '⬇';
+    if (low.startsWith('print')) return '🖨';
+    if (low.startsWith('search') || low.startsWith('filter')) return '🔍';
+    if (low.startsWith('sort')) return '⇅';
+    if (low.startsWith('start') || low.startsWith('play')) return '▶';
+    if (low.startsWith('stop')) return '⏹';
+    if (low.startsWith('pause')) return '⏸';
+    return '▶';
   }
 
   /* ══════════════════════════════════════════
@@ -260,29 +316,146 @@
     }, '*');
   }
 
-  function executeWidgetAction(widgetVar, method) {
-    window.postMessage({ type: 'PF_INSPECTOR_EXEC_API', widgetVar, method }, '*');
+  /** ID único para correlacionar resultados con su llamada */
+  let __pfiCallSeq = 0;
+  /** Callbacks pendientes por callId (para inyectar resultado en mini-form) */
+  const pendingResultCallbacks = new Map();
+
+  function executeWidgetAction(widgetVar, method, args, callback) {
+    const callId = 'c' + (++__pfiCallSeq);
+    if (typeof callback === 'function') {
+      pendingResultCallbacks.set(callId, callback);
+      // Limpiar callback huérfano tras 10s
+      setTimeout(() => pendingResultCallbacks.delete(callId), 10000);
+    }
+    window.postMessage({
+      type: 'PF_INSPECTOR_EXEC_API',
+      widgetVar, method,
+      args: Array.isArray(args) ? args : [],
+      callId
+    }, '*');
+  }
+
+  /** Ejecuta un evento inline (atributo on*) sobre el elemento indicado */
+  function executeInlineEvent(ownerId, eventAttr, widgetVar) {
+    window.postMessage({
+      type: 'PF_INSPECTOR_EXEC_EVENT',
+      ownerId, eventAttr, widgetVar
+    }, '*');
+  }
+
+  /**
+   * Muestra un toast persistente en el stack del panel (fuera de la zona que se
+   * re-renderiza al refrescar widgets). Soporta resultados largos con botón "ver".
+   */
+  function showToast(opts) {
+    if (!panelEl) return;
+    const stack = panelEl.querySelector('#pfi-toast-stack');
+    if (!stack) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'pfi-action-toast ' + (opts.success ? 'pfi-toast-ok' : 'pfi-toast-err');
+
+    // Texto principal
+    const textSpan = document.createElement('span');
+    textSpan.className = 'pfi-toast-text';
+    textSpan.textContent = opts.text || '';
+    toast.appendChild(textSpan);
+
+    // Botón "ver completo" para resultados largos
+    if (opts.fullResult && opts.fullResult.length > 0) {
+      const viewBtn = document.createElement('button');
+      viewBtn.className = 'pfi-toast-view-btn';
+      viewBtn.textContent = '⛶ ' + t('viewFull');
+      viewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showResultModal(opts.title || '', opts.fullResult);
+      });
+      toast.appendChild(viewBtn);
+    }
+
+    // Botón cerrar
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'pfi-toast-close-btn';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => toast.remove());
+    toast.appendChild(closeBtn);
+
+    stack.appendChild(toast);
+    // Auto-hide después de 5s (más tiempo que antes)
+    const hideMs = opts.fullResult ? 8000 : 5000;
+    setTimeout(() => {
+      toast.classList.add('pfi-toast-leaving');
+      setTimeout(() => toast.remove(), 300);
+    }, hideMs);
+  }
+
+  /** Muestra un modal con el resultado completo formateado */
+  function showResultModal(title, content) {
+    if (!panelEl) return;
+    // Cerrar modal previo si existe
+    const prev = panelEl.querySelector('.pfi-result-modal');
+    if (prev) prev.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'pfi-result-modal';
+    modal.innerHTML = `
+      <div class="pfi-detail-header">
+        <button class="pfi-back-btn" data-role="close" title="${escAttr(t('back'))}">←</button>
+        <span class="pfi-detail-title">${escHtml(title || t('resultTitle'))}</span>
+        <button class="pfi-header-btn" data-role="copy" title="${escAttr(t('copyResult'))}">⎘</button>
+      </div>
+      <div class="pfi-result-body"><pre class="pfi-result-pre">${escHtml(content)}</pre></div>
+    `;
+    panelEl.appendChild(modal);
+    modal.querySelector('[data-role="close"]').addEventListener('click', () => modal.remove());
+    modal.querySelector('[data-role="copy"]').addEventListener('click', () => {
+      try {
+        navigator.clipboard.writeText(content);
+        showToast({ success: true, text: t('copied') });
+      } catch (e) { /* ignore */ }
+    });
   }
 
   function handleExecResult(data) {
     if (!panelEl) return;
-    // Buscar el área de toast dentro del acordeón actualmente abierto
-    const container = panelEl.querySelector('.pfi-actions-toast-area');
-    if (!container) return;
-    const prev = container.querySelector('.pfi-action-toast');
-    if (prev) prev.remove();
 
-    const toast = document.createElement('div');
-    if (data.success) {
-      toast.className = 'pfi-action-toast pfi-toast-ok';
-      toast.textContent = t('execOk', data.widgetVar, data.method);
-    } else {
-      toast.className = 'pfi-action-toast pfi-toast-err';
-      toast.textContent = t('execErr', data.error);
+    // Si la llamada tenía un callback asociado (mini-form), invocarlo en lugar
+    // de (o además de) mostrar toast.
+    if (data.callId && pendingResultCallbacks.has(data.callId)) {
+      const cb = pendingResultCallbacks.get(data.callId);
+      pendingResultCallbacks.delete(data.callId);
+      try { cb(data); } catch (e) { /* ignore */ }
+      // No mostramos toast cuando hay callback (el mini-form ya muestra el resultado)
+      return;
     }
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 2600);
+
+    if (data.success) {
+      const fullResult = data.hasResult ? String(data.result == null ? '' : data.result) : '';
+      let text;
+      if (data.hasResult) {
+        let resTxt = fullResult;
+        if (resTxt.length > 80) resTxt = resTxt.slice(0, 80) + '…';
+        text = t('execOkResult', data.widgetVar, data.method, resTxt);
+      } else {
+        text = t('execOk', data.widgetVar, data.method);
+      }
+      showToast({
+        success: true,
+        text: text,
+        // Pasar el resultado completo solo si es lo bastante largo como para
+        // que el botón "ver completo" tenga sentido
+        fullResult: fullResult.length > 80 ? fullResult : null,
+        title: "PF('" + data.widgetVar + "')." + data.method + "()"
+      });
+      // Refrescar metadatos tras la acción
+      setTimeout(requestWidgets, 80);
+    } else {
+      showToast({ success: false, text: t('execErr', data.error) });
+    }
   }
+
+
 
   /* ══════════════════════════════════════════
      Highlights de elementos
@@ -320,16 +493,18 @@
     }
   }
 
-  /** Resalta uno o varios IDs (separados por espacios) en el hover de filas de eventos */
+  /** Resalta uno o varios IDs (separados por espacios o comas) en el hover de filas de eventos */
   function highlightEventRow(value) {
     clearEventRowHighlights();
     if (!value) return;
-    const ids = String(value).split(/\s+/);
+    // Soportar separadores: espacios, comas, punto-y-coma
+    const ids = String(value).split(/[\s,;]+/);
     ids.forEach(rawId => {
-      if (!rawId) return;
+      const id = rawId && rawId.trim();
+      if (!id) return;
       // Saltar comodines @form / @this / @all / @parent ...
-      if (rawId.startsWith('@')) return;
-      const el = document.getElementById(rawId);
+      if (id.startsWith('@')) return;
+      const el = document.getElementById(id);
       if (el) {
         el.classList.add('pfi-highlight-target');
         eventRowHighlights.push(el);
@@ -580,9 +755,11 @@
         </div>
       </div>
       <div class="pfi-list" id="pfi-list"></div>
+      <div class="pfi-toast-stack" id="pfi-toast-stack"></div>
     `;
 
     document.body.appendChild(panelEl);
+
 
     document.getElementById('pfi-btn-close').addEventListener('click', closePanel);
     document.getElementById('pfi-btn-refresh').addEventListener('click', requestWidgets);
@@ -880,7 +1057,7 @@
     // ── Eventos ──
     let eventsHtml = '';
     if (w.events && w.events.length > 0) {
-      eventsHtml = w.events.map(ev => {
+      eventsHtml = w.events.map((ev, evIdx) => {
         let paramsHtml = '';
         if (ev.parsedParams && ev.parsedParams.length > 0) {
           paramsHtml = `
@@ -905,23 +1082,43 @@
           `;
         }
         const srcLabel = ev.source === 'jquery' ? t('sourceJquery') : t('sourceInline');
+
+        // Botón ejecutar para eventos inline con ownerId conocido
+        let execBtn = '';
+        if (ev.source === 'inline' && ev.ownerId) {
+          execBtn = `<button class="pfi-event-exec-btn"
+            data-owner-id="${escAttr(ev.ownerId)}"
+            data-event-attr="${escAttr(ev.event)}"
+            data-wvar="${escAttr(w.widgetVar)}"
+            title="${escAttr(t('btnExecEvent'))}">▶</button>`;
+        }
+
+        // Mostrar el ID del elemento "dueño" del evento si difiere del id del widget
+        const ownerInfo = (ev.ownerId && ev.ownerId !== w.id)
+          ? `<div class="pfi-event-owner" title="${escAttr(ev.ownerId)}">↳ ${escHtml(ev.ownerId)}</div>`
+          : '';
+
         return `
           <div class="pfi-event-block">
             <div class="pfi-event-head">
               <span class="pfi-event-name">${escHtml(ev.event)}</span>
               <span class="pfi-event-source pfi-event-source-${escAttr(ev.source || 'inline')}">${escHtml(srcLabel)}</span>
+              ${execBtn}
             </div>
+            ${ownerInfo}
             <div class="pfi-event-raw">${escHtml(ev.raw)}</div>
             ${paramsHtml}
           </div>
         `;
       }).join('');
     } else {
-      // Si no hay eventos y los jQuery están desactivados, mostrar pista
+      // Si no hay eventos y los jQuery están desactivados, mostrar pista clicable
+      // que abre la sección de Configuración para activarlos
       const hint = !config.showJqueryEvents
-        ? `<div class="pfi-events-hint">${escHtml(t('eventsJqueryDisabled'))}</div>`
+        ? `<div class="pfi-events-hint pfi-clickable" data-role="open-config" title="${escAttr(t('openConfig'))}">${escHtml(t('eventsJqueryDisabled'))}</div>`
         : '';
       eventsHtml = `<div class="pfi-events-empty">${escHtml(t('eventsEmpty'))}</div>${hint}`;
+
     }
 
     // ── Target ──
@@ -938,35 +1135,151 @@
       `;
     }
 
-    // ── Client API ──
-    let apiHtml = '';
-    if (w.clientAPI && w.clientAPI.length > 0) {
-      apiHtml = `
+    // ── Acciones / Client API ejecutable ──
+    // Combinar acciones "destacadas" + todos los métodos del clientAPI callable
+    // (arity 0 y no destructivos). Se renderizan como botones ejecutables.
+    const featured = getActionsForType(w.type);
+    const apiList = (w.clientAPI || []);
+    // Normalizar: si w.clientAPI viene como array de strings (versiones antiguas), convertir
+    const normalizedApi = apiList.map(m => (typeof m === 'string')
+      ? { name: m, arity: 0, callable: true }
+      : m
+    );
+
+    // Botones ejecutables: featured + métodos callable (sin duplicar)
+    const seenAct = new Set();
+    const callableMethods = [];
+    featured.forEach(name => {
+      if (seenAct.has(name)) return;
+      seenAct.add(name);
+      // Solo se considera ejecutable si existe en el clientAPI o si confiamos en que el widget lo expone
+      callableMethods.push(name);
+    });
+    normalizedApi.forEach(m => {
+      if (!m.callable) return;
+      if (seenAct.has(m.name)) return;
+      seenAct.add(m.name);
+      callableMethods.push(m.name);
+    });
+
+    // Métodos no ejecutables (requieren argumentos o están en blacklist): se muestran como tags
+    const nonCallableMethods = normalizedApi.filter(m => !m.callable);
+
+    // Acciones que no aplican según el estado actual del widget
+    // (no se puede deshabilitar lo que ya está deshabilitado, ni mostrar lo ya visible, etc.)
+    const md = w.metadata || {};
+    // Para AutoComplete, show() muestra el panel de sugerencias (no el widget en sí),
+    // por lo que visible:true no implica que show() sea incompatible.
+    const isAutoComplete = w.type && w.type.toLowerCase().includes('autocomplete');
+    function isActionIncompatible(name) {
+      const n = String(name);
+      if (md.disabled === true && n === 'disable') return t('disabledAlready');
+      if (md.disabled === false && n === 'enable') return t('enabledAlready');
+      if (!isAutoComplete && md.visible === true && (n === 'show' || n === 'showAll' || n === 'open')) return t('shownAlready');
+      if (md.visible === false && (n === 'hide' || n === 'hideAll' || n === 'close')) return t('hiddenAlready');
+      return null;
+    }
+
+    // ── Sección unificada "Client API" ─────────────────────────────────────
+    // Grupo 1 (azul): métodos ejecutables sin argumentos.
+    // Grupo 2 (naranja): métodos que requieren argumentos (mini-form).
+    // Ambos tipos de botón comparten la misma altura.
+    let clientApiHtml = '';
+    if (callableMethods.length > 0 || nonCallableMethods.length > 0) {
+      const callableGroup = callableMethods.length > 0 ? `
+        <div class="pfi-actions-grid">
+          ${callableMethods.map(name => {
+            const icon = getActionIcon(name);
+            const incompatReason = isActionIncompatible(name);
+            const tooltip = "PF('" + w.widgetVar + "')." + name + '()' + (incompatReason ? ' — ' + incompatReason : '');
+            const disabledAttr = incompatReason ? ' disabled aria-disabled="true"' : '';
+            const disabledCls = incompatReason ? ' pfi-action-disabled' : '';
+            return `<button class="pfi-action-btn${disabledCls}" data-action="${escAttr(name)}" data-wvar="${escAttr(w.widgetVar)}" title="${escAttr(tooltip)}"${disabledAttr}>
+              <span class="pfi-action-icon">${icon}</span>${escHtml(name)}()
+            </button>`;
+          }).join('')}
+        </div>` : '';
+
+      const argsGroup = nonCallableMethods.length > 0 ? `
+        <div class="pfi-api-list${callableMethods.length > 0 ? ' pfi-api-list-gap' : ''}">
+          ${nonCallableMethods.map(m => `<button type="button" class="pfi-api-method-btn"
+            data-method="${escAttr(m.name)}"
+            data-arity="${m.arity}"
+            data-wvar="${escAttr(w.widgetVar)}"
+            title="${escAttr(t('apiOpenForm', m.name, m.arity))}">
+            <span class="pfi-action-icon">${getActionIcon(m.name)}</span>${escHtml(m.name)}(<span class="pfi-api-arity">${m.arity}</span>)
+          </button>`).join('')}
+        </div>` : '';
+
+      clientApiHtml = `
         <div class="pfi-detail-section">
           <h4>${escHtml(t('sectionClientApi'))}</h4>
-          <div class="pfi-api-list">
-            ${w.clientAPI.map(m => `<span class="pfi-api-tag">${escHtml(m)}()</span>`).join('')}
-          </div>
+          ${callableGroup}
+          ${argsGroup}
+          <div class="pfi-api-form-host" data-role="api-form-host"></div>
+          <div class="pfi-actions-toast-area"></div>
         </div>
       `;
     }
 
-    // ── Acciones ──
-    const actions = getActionsForType(w.type);
-    let actionsHtml = '';
-    if (actions.length > 0) {
-      const buttonsHtml = actions.map(action => {
-        const icon = ACTION_ICONS[action] || '▶';
-        return `<button class="pfi-action-btn" data-action="${escAttr(action)}" data-wvar="${escAttr(w.widgetVar)}">
-          <span class="pfi-action-icon">${icon}</span>${escHtml(action)}()
-        </button>`;
-      }).join('');
 
-      actionsHtml = `
+    // ── Metadata ──
+    let metaHtml = '';
+    if (w.metadata && Object.keys(w.metadata).length > 0) {
+      const META_LABELS = {
+        disabled: '🚫 disabled',
+        readonly: '🔒 readonly',
+        required: '❗ required',
+        visible: '👁 visible',
+        min: '⬇ min', max: '⬆ max',
+        minlength: 'minlength', maxlength: 'maxlength',
+        step: 'step',
+        value: 'value', defaultValue: 'defaultValue',
+        placeholder: 'placeholder', pattern: 'pattern',
+        multiple: 'multiple', editable: 'editable',
+        filter: 'filter', filterMatchMode: 'filterMatchMode',
+        selectionMode: 'selectionMode',
+        paginator: 'paginator', rows: 'rows', rowsPerPageTemplate: 'rowsPerPageTemplate',
+        lazy: 'lazy', liveScroll: 'liveScroll',
+        scrollable: 'scrollable', scrollHeight: 'scrollHeight', scrollWidth: 'scrollWidth',
+        autoUpdate: 'autoUpdate', global: 'global', partialSubmit: 'partialSubmit',
+        process: 'process', update: 'update', event: 'event',
+        modal: 'modal', draggable: 'draggable', resizable: 'resizable',
+        closable: 'closable', closeOnEscape: 'closeOnEscape',
+        width: 'width', height: 'height', position: 'position',
+        dateFormat: 'dateFormat', showTime: 'showTime', showSeconds: 'showSeconds',
+        timeOnly: 'timeOnly', mode: 'mode', selectOtherMonths: 'selectOtherMonths',
+        currencySymbol: 'currencySymbol', decimalSeparator: 'decimalSeparator',
+        thousandSeparator: 'thousandSeparator', decimalPlaces: 'decimalPlaces',
+        symbol: 'symbol', orientation: 'orientation', dropdownMode: 'dropdownMode',
+        forceSelection: 'forceSelection', unique: 'unique', cache: 'cache',
+        showHeader: 'showHeader', showFooter: 'showFooter',
+        effect: 'effect', effectSpeed: 'effectSpeed',
+        maxFileSize: 'maxFileSize', allowTypes: 'allowTypes', fileLimit: 'fileLimit',
+        target: 'target', targetId: 'targetId', url: 'url'
+      };
+      const rows = Object.keys(w.metadata).map(k => {
+        const v = w.metadata[k];
+        const label = META_LABELS[k] || k;
+        let displayVal;
+        if (v === true) {
+          displayVal = `<span class="pfi-meta-bool-true">✓ true</span>`;
+        } else if (v === false) {
+          displayVal = `<span class="pfi-meta-bool-false">✗ false</span>`;
+        } else if (v === null || v === undefined || v === '') {
+          displayVal = `<span class="pfi-meta-null">—</span>`;
+        } else {
+          displayVal = `<span class="pfi-meta-value-text">${escHtml(String(v))}</span>`;
+        }
+        return `<div class="pfi-meta-row">
+          <span class="pfi-meta-key">${escHtml(label)}</span>
+          <span class="pfi-meta-value">${displayVal}</span>
+        </div>`;
+      }).join('');
+      metaHtml = `
         <div class="pfi-detail-section">
-          <h4>${escHtml(t('sectionActions'))}</h4>
-          <div class="pfi-actions-grid">${buttonsHtml}</div>
-          <div class="pfi-actions-toast-area"></div>
+          <h4>${escHtml(t('sectionMetadata'))}</h4>
+          <div class="pfi-meta-grid">${rows}</div>
         </div>
       `;
     }
@@ -978,10 +1291,18 @@
           <span class="pfi-detail-label">${escHtml(t('labelType'))}</span>
           <span class="pfi-detail-value">${escHtml(w.type)}</span>
         </div>
+        <div class="pfi-detail-row">
+          <span class="pfi-detail-label">${escHtml(t('labelWidgetVar'))}</span>
+          <span class="pfi-detail-value">${escHtml(w.widgetVar)}</span>
+        </div>
+        <div class="pfi-detail-row">
+          <span class="pfi-detail-label">${escHtml(t('labelId'))}</span>
+          <span class="pfi-detail-value">${escHtml(w.id)}</span>
+        </div>
       </div>
+      ${metaHtml}
       ${targetHtml}
-      ${actionsHtml}
-      ${apiHtml}
+      ${clientApiHtml}
       <div class="pfi-detail-section">
         <h4>${escHtml(t('sectionEvents'))}</h4>
         ${eventsHtml}
@@ -1011,8 +1332,45 @@
       });
     });
 
+    // Botón ejecutar evento inline (al lado del nombre del evento)
+    detail.querySelectorAll('.pfi-event-exec-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ownerId = btn.getAttribute('data-owner-id');
+        const evAttr = btn.getAttribute('data-event-attr');
+        const wvar = btn.getAttribute('data-wvar');
+        // Crear área de toast en el bloque del evento si no existe
+        let host = btn.closest('.pfi-event-block');
+        let toastArea = host && host.querySelector('.pfi-actions-toast-area');
+        if (host && !toastArea) {
+          toastArea = document.createElement('div');
+          toastArea.className = 'pfi-actions-toast-area';
+          host.appendChild(toastArea);
+        }
+        // El toast se renderizará en cualquier .pfi-actions-toast-area existente
+        executeInlineEvent(ownerId, evAttr, wvar);
+      });
+      // Resaltar el elemento dueño al hacer hover sobre el botón
+      btn.addEventListener('mouseenter', () => {
+        const ownerId = btn.getAttribute('data-owner-id');
+        if (ownerId) highlightTarget(ownerId);
+      });
+      btn.addEventListener('mouseleave', () => {
+        clearTargetHighlight();
+      });
+    });
+
+    // Hint clicable: "Eventos jQuery desactivados…" abre el panel de configuración
+    detail.querySelectorAll('.pfi-events-hint.pfi-clickable[data-role="open-config"]').forEach(hint => {
+      hint.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showConfig();
+      });
+    });
+
     // Hover en filas de eventos → resaltar elementos cuyo ID aparece en "valor"
     detail.querySelectorAll('.pfi-event-row').forEach(row => {
+
       row.addEventListener('mouseenter', () => {
         const val = row.getAttribute('data-value');
         highlightEventRow(val);
@@ -1023,7 +1381,173 @@
         row.classList.remove('pfi-event-row-active');
       });
     });
+
+    // Botones de Client API que requieren argumentos → abrir mini-form
+    const formHost = detail.querySelector('[data-role="api-form-host"]');
+    detail.querySelectorAll('.pfi-api-method-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const method = btn.getAttribute('data-method');
+        const arity = parseInt(btn.getAttribute('data-arity'), 10) || 0;
+        const wvar = btn.getAttribute('data-wvar');
+        openApiArgForm(formHost, btn, wvar, method, arity);
+      });
+    });
   }
+
+  /**
+   * Abre/cierra un mini-formulario para ejecutar un método con argumentos.
+   * Los argumentos se introducen como JSON (cada campo). Strings simples,
+   * números y booleanos se aceptan tal cual.
+   */
+  function openApiArgForm(host, triggerBtn, widgetVar, method, arity) {
+    if (!host) return;
+
+    // Si ya hay un form abierto para el MISMO método y widget, lo cerramos (toggle)
+    const existing = host.querySelector('.pfi-api-form');
+    const sameMethod = existing
+      && existing.getAttribute('data-method') === method
+      && existing.getAttribute('data-wvar') === widgetVar;
+    host.innerHTML = '';
+    // Desmarcar selección previa
+    host.parentElement.querySelectorAll('.pfi-api-method-btn.pfi-api-method-active')
+      .forEach(b => b.classList.remove('pfi-api-method-active'));
+
+    if (sameMethod) return; // era toggle de cierre
+
+    if (triggerBtn) triggerBtn.classList.add('pfi-api-method-active');
+
+    // Construir N filas de argumento (al menos 1 si arity==0 sería raro pero defensivo)
+    const argCount = Math.max(arity, 1);
+    const argRowsHtml = [];
+    for (let i = 0; i < argCount; i++) {
+      argRowsHtml.push(`
+        <div class="pfi-api-arg-row">
+          <label class="pfi-api-arg-label">arg ${i + 1}</label>
+          <input type="text" class="pfi-api-arg-input"
+            data-arg-index="${i}"
+            placeholder="${escAttr(t('argPlaceholder'))}"
+            spellcheck="false"
+            autocomplete="off">
+        </div>
+      `);
+    }
+
+    const form = document.createElement('div');
+    form.className = 'pfi-api-form';
+    form.setAttribute('data-method', method);
+    form.setAttribute('data-wvar', widgetVar);
+    form.innerHTML = `
+      <div class="pfi-api-form-header">
+        <span class="pfi-api-form-title">PF('${escHtml(widgetVar)}').${escHtml(method)}(...)</span>
+        <button type="button" class="pfi-api-form-close" data-role="close" title="${escAttr(t('btnCancel'))}">✕</button>
+      </div>
+      <div class="pfi-api-form-hint">${escHtml(t('argHint'))}</div>
+      <div class="pfi-api-form-body">
+        ${argRowsHtml.join('')}
+      </div>
+      <div class="pfi-api-form-actions">
+        <button type="button" class="pfi-api-exec-btn" data-role="exec">▶ ${escHtml(t('btnExec'))}</button>
+      </div>
+      <div class="pfi-api-result" data-role="result" hidden></div>
+    `;
+    host.appendChild(form);
+
+    const resultBox = form.querySelector('[data-role="result"]');
+    const inputs = Array.from(form.querySelectorAll('.pfi-api-arg-input'));
+
+    form.querySelector('[data-role="close"]').addEventListener('click', () => {
+      host.innerHTML = '';
+      if (triggerBtn) triggerBtn.classList.remove('pfi-api-method-active');
+    });
+
+    // Foco automático en el primer input
+    setTimeout(() => { if (inputs[0]) inputs[0].focus(); }, 50);
+
+    function execForm() {
+      // Parsear cada input: intentar JSON.parse, fallback a string literal
+      const args = [];
+      for (const inp of inputs) {
+        const raw = inp.value;
+        if (raw === '') {
+          args.push(undefined);
+          continue;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          // No es JSON válido → tratar como string literal
+          parsed = raw;
+        }
+        args.push(parsed);
+      }
+
+      // Recortar undefined del final para llamar con la arity adecuada
+      while (args.length > 0 && args[args.length - 1] === undefined) {
+        args.pop();
+      }
+
+      resultBox.hidden = false;
+      resultBox.className = 'pfi-api-result pfi-api-result-pending';
+      resultBox.textContent = '⏳ ' + t('executing');
+
+      executeWidgetAction(widgetVar, method, args, (data) => {
+        if (!data.success) {
+          resultBox.className = 'pfi-api-result pfi-api-result-err';
+          resultBox.textContent = '✗ ' + (data.error || '');
+          return;
+        }
+        resultBox.className = 'pfi-api-result pfi-api-result-ok';
+        if (!data.hasResult) {
+          resultBox.textContent = '✓ ' + t('execOk', data.widgetVar, data.method);
+        } else {
+          const full = String(data.result == null ? '' : data.result);
+          // Si es largo, mostrar versión truncada con botón "ver completo"
+          resultBox.innerHTML = '';
+          const header = document.createElement('div');
+          header.className = 'pfi-api-result-header';
+          header.textContent = '✓ ' + t('returnedValue') + ':';
+          resultBox.appendChild(header);
+          const pre = document.createElement('pre');
+          pre.className = 'pfi-api-result-pre';
+          pre.textContent = full;
+          resultBox.appendChild(pre);
+          if (full.length > 200) {
+            const expandBtn = document.createElement('button');
+            expandBtn.className = 'pfi-api-result-expand';
+            expandBtn.textContent = '⛶ ' + t('viewFull');
+            expandBtn.addEventListener('click', () => {
+              showResultModal("PF('" + widgetVar + "')." + method + '()', full);
+            });
+            resultBox.appendChild(expandBtn);
+          }
+          // Botón copiar
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'pfi-api-result-copy';
+          copyBtn.textContent = '⎘ ' + t('copyResult');
+          copyBtn.addEventListener('click', () => {
+            try {
+              navigator.clipboard.writeText(full);
+              showToast({ success: true, text: t('copied') });
+            } catch (e) { /* ignore */ }
+          });
+          resultBox.appendChild(copyBtn);
+        }
+        // Refrescar metadatos (el toast persistente está aparte)
+        setTimeout(requestWidgets, 80);
+      });
+    }
+
+    form.querySelector('[data-role="exec"]').addEventListener('click', execForm);
+    // Enter en los inputs ejecuta el formulario
+    inputs.forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); execForm(); }
+      });
+    });
+  }
+
 
   /* ══════════════════════════════════════════
      Panel de Configuración

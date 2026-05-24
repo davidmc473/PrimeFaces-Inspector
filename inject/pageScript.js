@@ -64,18 +64,12 @@
   }
 
   /**
-   * Extrae todos los eventos asociados a un elemento DOM:
-   *  - atributos HTML on* (onclick, onchange, onkeyup, …)
-   *  - eventos jQuery (`$._data(el, 'events')`) — namespaces y delegados
-   *
-   * @param {Element} el  Elemento DOM
-   * @param {boolean} includeJquery  Si se deben incluir los eventos enlazados con jQuery
+   * Extrae eventos inline (atributos on*) de un elemento.
+   * Devuelve array de {source:'inline', event, raw, parsedParams, ownerId}.
    */
-  function extractEvents(el, includeJquery) {
-    if (!el) return [];
-    const events = [];
-
-    // 1) Eventos inline (atributos onXxx) — todos, no solo onclick
+  function extractInlineEventsOf(el, ownerId) {
+    const out = [];
+    if (!el || !el.attributes) return out;
     const attrs = el.attributes;
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
@@ -88,13 +82,42 @@
           detail.push({ letter: k, name: info.name, desc: info.desc, value: v });
         }
       }
-      events.push({
+      out.push({
         source: 'inline',
         event: attr.name,
         raw: attr.value,
-        parsedParams: detail
+        parsedParams: detail,
+        ownerId: ownerId || (el.id || null)
       });
     }
+    return out;
+  }
+
+  /**
+   * Extrae todos los eventos asociados a un elemento DOM y a sus descendientes relevantes:
+   *  - atributos HTML on* (onclick, onchange, onkeyup, …)
+   *  - eventos jQuery (`$._data(el, 'events')`) — namespaces y delegados
+   *
+   * @param {Element} el  Elemento raíz del widget
+   * @param {boolean} includeJquery  Si se deben incluir los eventos enlazados con jQuery
+   */
+  function extractEvents(el, includeJquery) {
+    if (!el) return [];
+    let events = [];
+
+    // 1) Eventos inline en el propio elemento
+    events = events.concat(extractInlineEventsOf(el, el.id || null));
+
+    // 1b) Eventos inline en descendientes relevantes (inputs, selects, textarea,
+    //     botones, anchors y elementos ocultos como ui-helper-hidden-accessible).
+    //     Esto cubre casos como SelectOneMenu donde el onchange vive en el <select> interno.
+    try {
+      const desc = el.querySelectorAll('input, select, textarea, button, a, [onclick], [onchange], [onkeyup], [onkeydown], [onkeypress], [onfocus], [onblur], [onsubmit], [oninput], [onmouseover], [onmouseout]');
+      desc.forEach(child => {
+        if (child === el) return;
+        events = events.concat(extractInlineEventsOf(child, child.id || el.id || null));
+      });
+    } catch (e) { /* ignore */ }
 
     if (!includeJquery) return events;
 
@@ -123,7 +146,8 @@
                 source: 'jquery',
                 event: evName + ns + selector + (handlers.length > 1 ? ' #' + (idx + 1) : ''),
                 raw: raw,
-                parsedParams: detail
+                parsedParams: detail,
+                ownerId: el.id || null
               });
             });
           }
@@ -164,11 +188,23 @@
     return (widget.cfg && widget.cfg.widgetVar) || 'Unknown';
   }
 
-  /** Obtiene los métodos del Client API de un widget */
+  /**
+   * Obtiene los métodos del Client API de un widget.
+   * Devuelve [{name, arity, callable}] — `callable` indica si se puede ejecutar
+   * sin argumentos de forma segura (arity 0 y no excluido).
+   */
   function getClientAPI(widget) {
     if (!widget) return [];
     const methods = [];
     const seen = new Set();
+    // Métodos que no se deben ejecutar nunca desde el inspector
+    const BLACKLIST = new Set([
+      'constructor', 'init', 'initialize', '_init', 'destroy', 'cleanup',
+      'remove', 'destruct', 'render', 'create',
+      'getBehavior', 'callBehavior', 'hasBehavior',
+      'bindEvents', 'unbindEvents', 'setupEvents',
+      'getJQ', 'getId'
+    ]);
     let proto = Object.getPrototypeOf(widget);
     while (proto && proto.constructor && proto.constructor.name !== 'Object') {
       for (const key of Object.getOwnPropertyNames(proto)) {
@@ -176,16 +212,260 @@
         if (key.startsWith('_')) continue;
         if (seen.has(key)) continue;
         try {
-          if (typeof proto[key] === 'function') {
+          const v = proto[key];
+          if (typeof v === 'function') {
             seen.add(key);
-            methods.push(key);
+            const arity = v.length;
+            const callable = arity === 0 && !BLACKLIST.has(key);
+            methods.push({ name: key, arity: arity, callable: callable });
           }
         } catch (e) { /* getter */ }
       }
       proto = Object.getPrototypeOf(proto);
     }
-    return methods.sort();
+    methods.sort((a, b) => a.name.localeCompare(b.name));
+    return methods;
   }
+
+  /**
+   * Devuelve el primer input/select/textarea relevante dentro del widget.
+   * En PrimeFaces a menudo el elemento "padre" (.ui-inputtext wrapper) no tiene
+   * los atributos `data-p-*`; éstos viven en el <input> real interno.
+   */
+  function findPrimaryInput(el) {
+    if (!el) return null;
+    // Si el propio elemento ES un input/select/textarea, devolverlo
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return el;
+    // Buscar el primer input significativo: priorizar los que tienen data-p-*
+    const candidates = el.querySelectorAll('input, select, textarea');
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      // Saltar inputs hidden o auxiliares (e.g. ui-helper-hidden)
+      if (c.type === 'hidden') continue;
+      // Si tiene cualquier atributo data-p-* lo preferimos
+      for (let j = 0; j < c.attributes.length; j++) {
+        if (c.attributes[j].name.indexOf('data-p-') === 0) return c;
+      }
+    }
+    // Fallback: primero no-hidden
+    for (let i = 0; i < candidates.length; i++) {
+      if (candidates[i].type !== 'hidden') return candidates[i];
+    }
+    return null;
+  }
+
+  /** Convierte un string atributo a tipo (número/booleano/string) */
+  function coerceAttr(v) {
+    if (v === null || v === undefined) return null;
+    if (v === '') return '';
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    if (/^-?\d+$/.test(v)) {
+      const n = parseInt(v, 10);
+      if (!isNaN(n)) return n;
+    }
+    if (/^-?\d+\.\d+$/.test(v)) {
+      const f = parseFloat(v);
+      if (!isNaN(f)) return f;
+    }
+    return v;
+  }
+
+  /**
+   * Lee los atributos `data-p-*` y atributos HTML estándar (maxlength,
+   * minlength, pattern, min, max, step, placeholder…) del input interno
+   * del widget. Devuelve un objeto con las propiedades encontradas.
+   *
+   * Mapea data-p-* a nombres "limpios":
+   *   data-p-maxlength  → maxlength
+   *   data-p-minlength  → minlength
+   *   data-p-regex      → pattern
+   *   data-p-val        → validator
+   *   data-p-vmsg       → validationMessage
+   *   data-p-label      → label
+   *   data-p-required   → required
+   *   data-p-min/max    → min/max
+   */
+  function readDomAttributes(el) {
+    const result = {};
+    const input = findPrimaryInput(el);
+    if (!input) return result;
+
+    // Atributos HTML estándar de validación / form
+    const HTML_ATTRS = ['maxlength', 'minlength', 'pattern', 'min', 'max', 'step', 'placeholder', 'type'];
+    HTML_ATTRS.forEach(name => {
+      if (input.hasAttribute(name)) {
+        result[name] = coerceAttr(input.getAttribute(name));
+      }
+    });
+
+    // Atributos data-p-* (PrimeFaces client-side validation)
+    const DATA_P_MAP = {
+      'data-p-maxlength': 'maxlength',
+      'data-p-minlength': 'minlength',
+      'data-p-regex': 'pattern',
+      'data-p-val': 'validator',
+      'data-p-vmsg': 'validatorMsg',
+      'data-p-label': 'label',
+      'data-p-required': 'required',
+      'data-p-min': 'min',
+      'data-p-max': 'max',
+      'data-p-rmsg': 'requiredMsg'
+    };
+    for (let i = 0; i < input.attributes.length; i++) {
+      const attr = input.attributes[i];
+      if (attr.name.indexOf('data-p-') !== 0) continue;
+      const mapped = DATA_P_MAP[attr.name];
+      if (mapped) {
+        result[mapped] = coerceAttr(attr.value);
+      } else {
+        // Conservar otros data-p-* con su nombre original (sin prefijo)
+        const cleanName = attr.name.replace(/^data-p-/, 'p_');
+        result[cleanName] = coerceAttr(attr.value);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Extrae metadata útil del widget (cfg + estado del DOM + data-p-* attrs).
+   * Devuelve un objeto plano clave→valor solo con campos relevantes.
+   */
+  function extractMetadata(widget, el) {
+    const meta = {};
+    const cfg = (widget && widget.cfg) || {};
+
+    // Detectar disabled tanto en cfg como en el DOM
+    let disabled = null;
+    if (typeof cfg.disabled === 'boolean') disabled = cfg.disabled;
+    if (el) {
+      // disabled como atributo en el propio elemento o en un input hijo
+      if (el.hasAttribute && el.hasAttribute('disabled')) disabled = true;
+      const innerInput = el.querySelector && el.querySelector('input,select,textarea,button');
+      if (innerInput && innerInput.disabled) disabled = true;
+      if (el.classList && (el.classList.contains('ui-state-disabled') || el.getAttribute('aria-disabled') === 'true')) {
+        if (disabled === null) disabled = true;
+      }
+    }
+    if (disabled !== null) meta.disabled = disabled;
+
+    // readonly
+    if (typeof cfg.readonly === 'boolean') meta.readonly = cfg.readonly;
+    if (el) {
+      const innerInput = el.querySelector && el.querySelector('input,textarea,select');
+      if (innerInput && innerInput.readOnly) meta.readonly = true;
+    }
+
+    // required
+    if (typeof cfg.required === 'boolean') meta.required = cfg.required;
+    if (el) {
+      const innerInput = el.querySelector && el.querySelector('input,textarea,select');
+      if (innerInput && innerInput.required) meta.required = true;
+      if (el.getAttribute && el.getAttribute('aria-required') === 'true') meta.required = true;
+    }
+
+
+    // Lista de propiedades del cfg que pueden interesar mostrar
+    const INTERESTING_CFG_KEYS = [
+      'value', 'defaultValue',
+      'min', 'max', 'minlength', 'maxlength', 'step',
+      'placeholder', 'pattern',
+      'multiple', 'editable', 'filter', 'filterMatchMode',
+      'selectionMode', 'paginator', 'rows', 'rowsPerPageTemplate',
+      'lazy', 'liveScroll', 'scrollable', 'scrollHeight', 'scrollWidth',
+      'autoUpdate', 'global', 'partialSubmit',
+      'process', 'update', 'event',
+      'modal', 'draggable', 'resizable', 'closable', 'closeOnEscape',
+      'width', 'height', 'position',
+      'dateFormat', 'showTime', 'showSeconds', 'timeOnly', 'mode', 'selectOtherMonths',
+      'currencySymbol', 'decimalSeparator', 'thousandSeparator', 'decimalPlaces', 'symbol',
+      'orientation', 'dropdownMode',
+      'forceSelection', 'unique', 'cache',
+      'showHeader', 'showFooter',
+      'effect', 'effectSpeed',
+      'maxFileSize', 'allowTypes', 'fileLimit',
+      'target', 'targetId',
+      'url'
+    ];
+    INTERESTING_CFG_KEYS.forEach(k => {
+      if (cfg.hasOwnProperty(k) && typeof cfg[k] !== 'function' && typeof cfg[k] !== 'object') {
+        meta[k] = cfg[k];
+      } else if (cfg.hasOwnProperty(k) && cfg[k] !== null && typeof cfg[k] === 'object' && !Array.isArray(cfg[k])) {
+        // mostrar resumen tipo "[Object]"
+        try { meta[k] = JSON.stringify(cfg[k]).slice(0, 80); } catch (e) { /* */ }
+      } else if (cfg.hasOwnProperty(k) && Array.isArray(cfg[k])) {
+        meta[k] = '[' + cfg[k].length + ' items]';
+      }
+    });
+
+    // visible
+    if (el) {
+      const cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      if (cs) {
+        meta.visible = !(cs.display === 'none' || cs.visibility === 'hidden');
+      }
+    }
+
+    // Fusionar atributos del DOM (data-p-* + atributos HTML estándar).
+    // Estos PREVALECEN sobre cfg si están definidos (son la "verdad" del DOM).
+    if (el) {
+      const domAttrs = readDomAttributes(el);
+      Object.keys(domAttrs).forEach(k => {
+        // Solo sobrescribir si el cfg no lo tenía o estaba vacío
+        if (meta[k] === undefined || meta[k] === null || meta[k] === '') {
+          meta[k] = domAttrs[k];
+        }
+      });
+    }
+
+    return meta;
+  }
+
+  /**
+   * Serializa un valor de retorno de un método de widget para mostrarlo.
+   * Devuelve {hasResult, result:string}.
+   */
+  function serializeResult(ret) {
+    if (ret === undefined) return { hasResult: false, result: '' };
+    try {
+      if (ret === null) return { hasResult: true, result: 'null' };
+      if (typeof ret === 'string') return { hasResult: true, result: ret };
+      if (typeof ret === 'number' || typeof ret === 'boolean') {
+        return { hasResult: true, result: String(ret) };
+      }
+      if (Array.isArray(ret)) {
+        // Si es pequeño, mostrar JSON; si no, resumen
+        try {
+          const json = JSON.stringify(ret);
+          if (json.length <= 400) return { hasResult: true, result: json };
+        } catch (e) { /* */ }
+        return { hasResult: true, result: '[' + ret.length + ' items]' };
+      }
+      if (ret && ret.jquery) {
+        const ids = [];
+        for (let i = 0; i < ret.length && i < 5; i++) {
+          ids.push(ret[i].id || ret[i].tagName);
+        }
+        return { hasResult: true, result: 'jQuery(' + ret.length + ')' + (ids.length ? ' [' + ids.join(', ') + ']' : '') };
+      }
+      if (typeof ret === 'object') {
+        if (ret.nodeType && ret.tagName) {
+          return { hasResult: true, result: '<' + ret.tagName.toLowerCase() + (ret.id ? ' id="' + ret.id + '"' : '') + '>' };
+        }
+        try {
+          const json = JSON.stringify(ret);
+          if (json && json.length > 800) return { hasResult: true, result: json.slice(0, 800) + '…' };
+          return { hasResult: true, result: json || '[object]' };
+        } catch (e) { return { hasResult: true, result: '[object]' }; }
+      }
+      return { hasResult: true, result: String(ret) };
+    } catch (e) {
+      return { hasResult: true, result: '[unserializable]' };
+    }
+  }
+
 
   /** Detecta versión de PrimeFaces */
   function detectPrimeFacesVersion() {
@@ -294,6 +574,7 @@
         clientAPI: getClientAPI(widget),
         targetId: targetId,
         events: el ? extractEvents(el, includeJquery) : [],
+        metadata: extractMetadata(widget, el),
         exists: !!el
       });
     }
@@ -362,21 +643,73 @@
     }
 
     if (event.data && event.data.type === 'PF_INSPECTOR_EXEC_API') {
-      const { widgetVar, method } = event.data;
+      const { widgetVar, method, args, callId } = event.data;
       try {
         if (typeof PrimeFaces !== 'undefined' && PrimeFaces.widgets && PrimeFaces.widgets[widgetVar]) {
           const widget = PrimeFaces.widgets[widgetVar];
           if (typeof widget[method] === 'function') {
-            widget[method]();
-            window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: true, widgetVar, method } }, '*');
+            const callArgs = Array.isArray(args) ? args : [];
+            const ret = widget[method].apply(widget, callArgs);
+            const ser = serializeResult(ret);
+            window.postMessage({
+              type: 'PF_INSPECTOR_EXEC_RESULT',
+              data: {
+                success: true,
+                widgetVar, method,
+                hasResult: ser.hasResult,
+                result: ser.result,
+                callId: callId || null,
+                argsCount: callArgs.length
+              }
+            }, '*');
           } else {
-            window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Method not found' } }, '*');
+            window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Method not found', callId: callId || null } }, '*');
           }
         } else {
-          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Widget not found' } }, '*');
+          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Widget not found', callId: callId || null } }, '*');
         }
       } catch (e) {
-        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: e.message } }, '*');
+        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: e.message, callId: callId || null } }, '*');
+      }
+    }
+
+
+
+    // Ejecutar un evento inline (atributo on*) sobre el elemento que lo tiene
+    if (event.data && event.data.type === 'PF_INSPECTOR_EXEC_EVENT') {
+      const { ownerId, eventAttr, widgetVar } = event.data;
+      try {
+        const el = ownerId ? document.getElementById(ownerId) : null;
+        if (!el) {
+          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: 'Element not found: ' + ownerId } }, '*');
+          return;
+        }
+        const evName = (eventAttr || '').replace(/^on/i, '');
+        // 1) Si existe la propiedad onXxx como función, ejecutarla
+        const fn = el[eventAttr];
+        if (typeof fn === 'function') {
+          fn.call(el, new Event(evName, { bubbles: true, cancelable: true }));
+          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + '()' } }, '*');
+          return;
+        }
+        // 2) Fallback: despachar el evento estándar para que cualquier listener responda
+        let ev;
+        // Eventos típicos que requieren MouseEvent
+        if (/^(click|dblclick|mouse|contextmenu)/i.test(evName)) {
+          ev = new MouseEvent(evName, { bubbles: true, cancelable: true, view: window });
+        } else if (/^(key)/i.test(evName)) {
+          ev = new KeyboardEvent(evName, { bubbles: true, cancelable: true });
+        } else if (/^(focus|blur)/i.test(evName)) {
+          ev = new FocusEvent(evName, { bubbles: true, cancelable: true });
+        } else if (/^(input|change|submit|reset)/i.test(evName)) {
+          ev = new Event(evName, { bubbles: true, cancelable: true });
+        } else {
+          ev = new Event(evName, { bubbles: true, cancelable: true });
+        }
+        el.dispatchEvent(ev);
+        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + ' dispatched' } }, '*');
+      } catch (e) {
+        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: e.message } }, '*');
       }
     }
   });

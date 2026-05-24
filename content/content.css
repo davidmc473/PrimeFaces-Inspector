@@ -149,7 +149,9 @@
   background: #0f0f23;
   border: 1px solid #333;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 0 10px;
+  height: 30px;
+  line-height: 28px;
   color: #ddd;
   font-size: 12px;
   outline: none;
@@ -167,12 +169,14 @@
 .pfi-multi-filter {
   position: relative;
   flex-shrink: 0;
+  height: 30px;
 }
 .pfi-filter-btn {
   background: #0f0f23;
   border: 1px solid #333;
   border-radius: 6px;
-  padding: 5px 8px;
+  padding: 0 8px;
+  height: 30px;
   color: #ddd;
   font-size: 11px;
   cursor: pointer;
@@ -548,14 +552,15 @@
   background: linear-gradient(135deg, #0090ff22, #00d4ff11);
   border: 1px solid #0090ff44;
   border-radius: 6px;
-  padding: 6px 14px;
+  padding: 5px 12px;
+  min-height: 30px;
   color: #5cc8ff;
   font-size: 12px;
   font-weight: 600;
   font-family: 'Consolas', 'Courier New', monospace;
   cursor: pointer;
   transition: all .15s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
 }
@@ -870,6 +875,8 @@
   outline-offset: 1px !important;
   cursor: crosshair !important;
   transition: outline .15s, box-shadow .15s !important;
+  /* Forzar que reciba eventos del mouse aunque el widget esté disabled */
+  pointer-events: auto !important;
 }
 .pfi-selection-candidate:hover {
   outline: 2px solid #00d4ff !important;
@@ -878,6 +885,104 @@
   z-index: 999999 !important;
   position: relative;
 }
+/* Asegurar que los hijos de widgets disabled (ui-state-disabled) no bloqueen el hover */
+.pfi-selection-candidate * {
+  pointer-events: none !important;
+}
+
+/* ═══════════════════════════════════════════
+   Eventos: botón ejecutar inline + owner info
+   ═══════════════════════════════════════════ */
+.pfi-event-exec-btn {
+  background: linear-gradient(135deg, #66bb6a33, #66bb6a11);
+  border: 1px solid #66bb6a66;
+  border-radius: 4px;
+  color: #81c784;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.pfi-event-exec-btn:hover {
+  background: #66bb6a;
+  color: #fff;
+  border-color: #4caf50;
+  box-shadow: 0 0 8px rgba(102,187,106,.35);
+}
+.pfi-event-exec-btn:active {
+  transform: scale(.92);
+}
+.pfi-event-owner {
+  font-size: 10px;
+  color: #888;
+  font-family: 'Consolas', 'Courier New', monospace;
+  margin: 0 0 4px 18px;
+  word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════
+   Metadata
+   ═══════════════════════════════════════════ */
+.pfi-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.pfi-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  background: #0a0a1a;
+  border: 1px solid #1f1f3a;
+  border-radius: 4px;
+  font-size: 11px;
+  min-width: 0;
+}
+.pfi-meta-key {
+  color: #888;
+  font-size: 10px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pfi-meta-value {
+  color: #ddd;
+  font-family: 'Consolas', 'Courier New', monospace;
+  word-break: break-all;
+}
+.pfi-meta-bool-true {
+  color: #66bb6a;
+  font-weight: 700;
+}
+.pfi-meta-bool-false {
+  color: #ef5350;
+  font-weight: 700;
+}
+.pfi-meta-null {
+  color: #555;
+}
+.pfi-meta-value-text {
+  color: #ffd180;
+}
+
+/* Pista al lado del título "Client API" cuando los métodos requieren argumentos */
+.pfi-api-hint {
+  font-size: 9px;
+  color: #888;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
 
 /* ── Drag handle ── */
 .pfi-drag-handle {
@@ -1090,3 +1195,440 @@
 .pfi-theme-light .pfi-about-value { color: #333; }
 .pfi-theme-light .pfi-about-link { color: #0070cc; }
 .pfi-theme-light .pfi-about-link:hover { color: #004c99; }
+
+/* ── Metadata (light) ── */
+.pfi-theme-light .pfi-meta-row {
+  background: #f5f7fa;
+  border-color: #dde2ea;
+}
+.pfi-theme-light .pfi-meta-key { color: #666; }
+.pfi-theme-light .pfi-meta-value { color: #333; }
+.pfi-theme-light .pfi-meta-bool-true { color: #2e7d32; }
+.pfi-theme-light .pfi-meta-bool-false { color: #c62828; }
+.pfi-theme-light .pfi-meta-null { color: #aaa; }
+.pfi-theme-light .pfi-meta-value-text { color: #b35900; }
+.pfi-theme-light .pfi-api-hint { color: #888; }
+
+/* ── Owner info eventos (light) ── */
+.pfi-theme-light .pfi-event-owner { color: #888; }
+
+/* ── Acción deshabilitada (no aplicable según estado del widget) ── */
+.pfi-action-btn.pfi-action-disabled,
+.pfi-action-btn[disabled] {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.4);
+  box-shadow: none !important;
+}
+.pfi-action-btn.pfi-action-disabled:hover,
+.pfi-action-btn[disabled]:hover {
+  background: linear-gradient(135deg, #0090ff22, #00d4ff11);
+  border-color: #0090ff44;
+  color: #5cc8ff;
+  box-shadow: none !important;
+}
+.pfi-theme-light .pfi-action-btn.pfi-action-disabled:hover,
+.pfi-theme-light .pfi-action-btn[disabled]:hover {
+  background: linear-gradient(135deg, #0070cc15, #00aaff0a);
+  border-color: #0070cc33;
+  color: #0070cc;
+}
+
+/* ── Hint clicable (lleva a Configuración) ── */
+.pfi-events-hint.pfi-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.pfi-events-hint.pfi-clickable:hover {
+  background: rgba(255, 171, 64, .15);
+  color: #ffc66d;
+}
+.pfi-theme-light .pfi-events-hint.pfi-clickable:hover {
+  background: #ffe0b2;
+  color: #b35900;
+}
+
+/* ════════════════════════════════════════════════════════════ *
+   Toasts persistentes (stack a nivel panel)
+   ════════════════════════════════════════════════════════════ */
+
+.pfi-toast-stack {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.pfi-toast-stack > .pfi-action-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  animation: pfi-toast-in .25s ease-out;
+  word-break: break-word;
+}
+
+.pfi-toast-stack > .pfi-action-toast.pfi-toast-leaving {
+  animation: pfi-toast-out .3s ease-in forwards;
+}
+
+@keyframes pfi-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pfi-toast-out {
+  to { opacity: 0; transform: translateY(8px); }
+}
+
+.pfi-action-toast.pfi-toast-ok {
+  background: rgba(0,200,80,.18);
+  border-color: rgba(0,200,80,.55);
+  color: #7be59a;
+}
+
+.pfi-action-toast.pfi-toast-err {
+  background: rgba(255,80,80,.18);
+  border-color: rgba(255,80,80,.55);
+  color: #ff9a9a;
+}
+
+.pfi-toast-text { flex: 1 1 auto; }
+
+.pfi-toast-view-btn,
+.pfi-toast-close-btn {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  opacity: .85;
+  flex: 0 0 auto;
+}
+
+.pfi-toast-view-btn:hover,
+.pfi-toast-close-btn:hover {
+  opacity: 1;
+  background: rgba(255,255,255,.08);
+}
+
+.pfi-theme-light .pfi-toast-view-btn:hover,
+.pfi-theme-light .pfi-toast-close-btn:hover { 
+  background: rgba(0,0,0,.06); 
+}
+
+
+
+
+/* ════════════════════════════════════════════════════════════
+   Client API: botones para métodos con argumentos
+   ════════════════════════════════════════════════════════════ */
+
+/* Espaciado entre el grupo de botones azules y el naranja */
+.pfi-api-list-gap {
+  margin-top: 6px;
+}
+
+.pfi-api-method-btn {
+  background: linear-gradient(135deg, #ff9b0033, #ff620011);
+  border: 1px solid #ff9b0055;
+  color: #ffc66d;
+  padding: 5px 12px;
+  min-height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Consolas', 'Courier New', monospace;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .15s ease;
+}
+.pfi-api-method-btn:hover {
+  background: linear-gradient(135deg, #ff9b00, #ff6200);
+  color: #fff;
+  border-color: #ffc66d;
+  box-shadow: 0 0 8px rgba(255,155,0,.4);
+}
+.pfi-api-method-btn:active {
+  transform: scale(.96);
+}
+.pfi-api-method-btn.pfi-api-method-active {
+  background: linear-gradient(135deg, #ff6200, #cc4f00);
+  color: #fff;
+  border-color: #ffc66d;
+  box-shadow: 0 0 0 2px rgba(255,198,109,.35);
+}
+.pfi-api-method-btn .pfi-action-icon {
+  font-size: 13px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+.pfi-api-method-btn .pfi-api-arity {
+  display: inline-block;
+  min-width: 14px;
+  padding: 0 4px;
+  background: rgba(0,0,0,.30);
+  border-radius: 3px;
+  font-size: 10px;
+  margin: 0 1px;
+  color: #fff;
+}
+.pfi-theme-light .pfi-api-method-btn {
+  background: linear-gradient(135deg, #ff9b0022, #ff62000a);
+  border-color: #ff9b0055;
+  color: #b35900;
+}
+.pfi-theme-light .pfi-api-method-btn:hover {
+  background: linear-gradient(135deg, #ff9b00, #ff6200);
+  color: #fff;
+}
+/* En tema claro, el fondo del badge de aridad es semitransparente oscuro
+   sobre el texto naranja: hacemos el badge más claro con texto oscuro visible */
+.pfi-theme-light .pfi-api-method-btn .pfi-api-arity {
+  background: rgba(0,0,0,.15);
+  color: #7a3d00;
+}
+/* En hover/active el fondo ya es naranja oscuro, el badge vuelve a ser blanco */
+.pfi-theme-light .pfi-api-method-btn:hover .pfi-api-arity,
+.pfi-theme-light .pfi-api-method-btn.pfi-api-method-active .pfi-api-arity {
+  background: rgba(0,0,0,.25);
+  color: #fff;
+}
+
+/* Mini-formulario para introducir argumentos */
+.pfi-api-form-host { margin-top: 8px; }
+.pfi-api-form {
+  background: #1a1f2e;
+  border: 1px solid #ff9b0055;
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: pfi-toast-in .2s ease-out;
+}
+.pfi-theme-light .pfi-api-form {
+  background: #fffaf0;
+  border-color: #ff9b0066;
+}
+.pfi-api-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pfi-api-form-title {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #ffc66d;
+  word-break: break-all;
+}
+.pfi-theme-light .pfi-api-form-title { color: #b35900; }
+.pfi-api-form-close {
+  background: transparent;
+  border: 1px solid #555;
+  color: #aaa;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.pfi-api-form-close:hover { color: #fff; border-color: #888; }
+.pfi-api-form-hint {
+  font-size: 10px;
+  color: #888;
+  font-style: italic;
+}
+.pfi-api-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pfi-api-arg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pfi-api-arg-label {
+  font-size: 11px;
+  color: #888;
+  min-width: 44px;
+  font-family: 'Courier New', monospace;
+}
+.pfi-api-arg-input {
+  flex: 1 1 auto;
+  background: #0d1117;
+  border: 1px solid #333;
+  color: #e0e0e0;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  outline: none;
+}
+.pfi-api-arg-input:focus {
+  border-color: #ffc66d;
+  box-shadow: 0 0 0 2px rgba(255,198,109,.2);
+}
+.pfi-theme-light .pfi-api-arg-input {
+  background: #fff;
+  border-color: #ccc;
+  color: #333;
+}
+.pfi-theme-light .pfi-api-arg-label { color: #777; }
+.pfi-api-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.pfi-api-exec-btn {
+  background: linear-gradient(135deg, #00c850, #00a040);
+  border: 1px solid #00c850;
+  color: #fff;
+  padding: 5px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
+  font-family: inherit;
+}
+.pfi-api-exec-btn:hover {
+  background: linear-gradient(135deg, #00e060, #00b048);
+  box-shadow: 0 0 8px rgba(0,200,80,.4);
+}
+
+/* Resultado dentro del mini-form */
+.pfi-api-result {
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  border: 1px solid;
+}
+.pfi-api-result-pending {
+  background: rgba(255,200,0,.10);
+  border-color: rgba(255,200,0,.4);
+  color: #ffd76d;
+}
+.pfi-api-result-ok {
+  background: rgba(0,200,80,.10);
+  border-color: rgba(0,200,80,.45);
+  color: #7be59a;
+}
+.pfi-api-result-err {
+  background: rgba(255,80,80,.10);
+  border-color: rgba(255,80,80,.45);
+  color: #ff9a9a;
+}
+.pfi-api-result-header {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.pfi-api-result-pre {
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: rgba(0,0,0,.30);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #e0e0e0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pfi-theme-light .pfi-api-result-pre {
+  background: rgba(0,0,0,.06);
+  color: #333;
+}
+.pfi-api-result-expand,
+.pfi-api-result-copy {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+  margin-right: 6px;
+  margin-top: 4px;
+  opacity: .85;
+}
+.pfi-api-result-expand:hover,
+.pfi-api-result-copy:hover {
+  opacity: 1;
+  background: rgba(255,255,255,.08);
+}
+.pfi-theme-light .pfi-api-result-expand:hover,
+.pfi-theme-light .pfi-api-result-copy:hover {
+  background: rgba(0,0,0,.06);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Modal de resultado completo (full overlay dentro del panel)
+   ════════════════════════════════════════════════════════════ */
+.pfi-result-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(13,17,23,.97);
+  display: flex;
+  flex-direction: column;
+  z-index: 25;
+  animation: pfi-toast-in .2s ease-out;
+}
+.pfi-theme-light .pfi-result-modal { background: rgba(255,255,255,.97); }
+.pfi-result-modal .pfi-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2f3e;
+}
+.pfi-result-modal .pfi-detail-title {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #00d4ff;
+  word-break: break-all;
+}
+.pfi-result-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+}
+.pfi-result-pre {
+  margin: 0;
+  padding: 10px;
+  background: #1a1f2e;
+  border: 1px solid #2a2f3e;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #e0e0e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pfi-theme-light .pfi-result-pre {
+  background: #f5f7fa;
+  border-color: #dde2ea;
+  color: #333;
+}
