@@ -889,6 +889,13 @@
 .pfi-selection-candidate * {
   pointer-events: none !important;
 }
+/* …pero los widgets anidados (p.ej. dentro de un Dialog o TabView) deben
+   seguir siendo seleccionables. Re-habilitamos el puntero en cualquier
+   candidato que esté dentro de otro candidato. */
+.pfi-selection-candidate .pfi-selection-candidate {
+  pointer-events: auto !important;
+}
+
 
 /* ═══════════════════════════════════════════
    Eventos: botón ejecutar inline + owner info
