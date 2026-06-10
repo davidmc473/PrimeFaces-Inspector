@@ -561,7 +561,11 @@
       const matchesSearch = !searchTerm ||
         w.widgetVar.toLowerCase().includes(searchTerm) ||
         w.id.toLowerCase().includes(searchTerm) ||
-        w.type.toLowerCase().includes(searchTerm);
+        w.type.toLowerCase().includes(searchTerm) ||
+        (function () {
+          const el = document.getElementById(w.id);
+          return el ? el.textContent.toLowerCase().includes(searchTerm) : false;
+        }());
       const matchesType = selectedTypes.size === 0 || selectedTypes.has(w.type);
       return matchesSearch && matchesType;
     });
