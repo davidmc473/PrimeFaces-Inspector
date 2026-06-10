@@ -1,20 +1,11 @@
-// Background service worker — Manifest V3
-// Al hacer click en el icono de la extensión, asegúrate de que el content
-// script está inyectado y luego pide togglear el panel.
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab || !tab.id) return;
   try {
     await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
   } catch (e) {
     try {
-      await chrome.scripting.insertCSS({
-        target: { tabId: tab.id },
-        files: ['dist/content.css']
-      });
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['dist/content.js']
-      });
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['dist/content.css'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['dist/content.js'] });
       await new Promise(r => setTimeout(r, 50));
       await chrome.tabs.sendMessage(tab.id, { action: 'togglePanel' });
     } catch (err) {

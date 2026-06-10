@@ -1,0 +1,12 @@
+{
+  "name": "primefaces-inspector",
+  "version": "0.4.0",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}

@@ -1,0 +1,22 @@
+export const state = {
+  panelEl: null,
+  widgetsData: [],
+  pageInfo: {
+    hasPrimeFaces: false,
+    version: null,
+    hasPrimeFacesExt: false,
+    versionExt: null,
+    hasJQuery: false,
+    widgetCount: 0,
+  },
+  filteredData: [],
+  searchTerm: '',
+  selectedTypes: new Set(),
+  currentHighlight: null,
+  currentTargetHighlight: null,
+  eventRowHighlights: [],
+  selectionMode: false,
+  ctrlShiftFired: false,
+  callSeq: 0,
+  pendingResultCallbacks: new Map(),
+};

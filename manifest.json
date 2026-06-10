@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PrimeFaces Inspector",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Inspect PrimeFaces widgets: list, search, filter, Client API, events and Ajax monitoring.",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {
@@ -20,17 +20,17 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["i18n/en.js", "i18n/es.js", "content/content.js"],
-      "css": ["content/content.css"],
+      "js": ["dist/content.js"],
+      "css": ["dist/content.css"],
       "run_at": "document_idle"
     }
   ],
   "background": {
-    "service_worker": "background/background.js"
+    "service_worker": "dist/background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": ["inject/pageScript.js"],
+      "resources": ["dist/inject/pageScript.js"],
       "matches": ["<all_urls>"]
     }
   ]
