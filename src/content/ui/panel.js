@@ -12,6 +12,7 @@ import { expandCard } from './widget-card.js';
 import { showConfig } from './config-panel.js';
 import { showToast, showResultModal } from './toast.js';
 import { toggleSelectionMode, deactivateSelectionMode } from './selection.js';
+import { initTooltips } from './tooltip.js';
 
 function applyTheme() {
   if (!state.panelEl) return;
@@ -117,6 +118,7 @@ export function createPanel() {
 
   wireSearchEvents(state.panelEl, buildCallbacks());
   makeDraggable(state.panelEl, state.panelEl.querySelector('.pfi-drag-handle'));
+  initTooltips(state.panelEl);
   applyTheme();
   applyDynamicColors();
   injectPageScript();
@@ -143,8 +145,19 @@ export function destroyPanel() {
   if (state.panelEl) { state.panelEl.remove(); state.panelEl = null; }
 }
 
+function togglePfDependentUi() {
+  if (!state.panelEl) return;
+  const hasPf = state.pageInfo.hasPrimeFaces;
+  const toolbar = state.panelEl.querySelector('.pfi-toolbar');
+  const selectBtn = state.panelEl.querySelector('#pfi-btn-select');
+  if (toolbar) toolbar.style.display = hasPf ? '' : 'none';
+  if (selectBtn) selectBtn.style.display = hasPf ? '' : 'none';
+  if (!hasPf && state.selectionMode) deactivateSelectionMode();
+}
+
 export function refreshPanel() {
   applyFilters();
   renderList(buildCallbacks());
   renderHeaderInfo();
+  togglePfDependentUi();
 }

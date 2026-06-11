@@ -2,6 +2,10 @@ import { state } from '../core/state.js';
 import { highlightElement, clearHighlight } from '../core/highlights.js';
 import { cssEsc } from './utils.js';
 
+let selectionCallbacks = {};
+let overlayEl = null;
+let lastWidgetVar = null;
+
 function findWidgetForElement(el) {
   let current = el;
   while (current && current !== document.body) {
@@ -25,19 +29,40 @@ function highlightCardInList(widgetVar) {
   }
 }
 
-function onSelectionMouseOver(e) {
-  if (state.panelEl && state.panelEl.contains(e.target)) return;
-  const widget = findWidgetForElement(e.target);
-  if (widget) { highlightElement(widget.id); highlightCardInList(widget.widgetVar); }
+/* El overlay se ignora momentáneamente para identificar el elemento real
+   bajo el cursor — funciona incluso con widgets deshabilitados, que de otro
+   modo no emiten eventos de ratón. */
+function elementUnderPointer(x, y) {
+  if (!overlayEl) return null;
+  overlayEl.style.pointerEvents = 'none';
+  const el = document.elementFromPoint(x, y);
+  overlayEl.style.pointerEvents = 'auto';
+  return el;
 }
 
-function onSelectionMouseOut(e) {
-  if (state.panelEl && state.panelEl.contains(e.target)) return;
+function resolveWidget(x, y) {
+  const el = elementUnderPointer(x, y);
+  if (!el) return null;
+  if (state.panelEl && state.panelEl.contains(el)) return null;
+  return findWidgetForElement(el);
 }
 
-function onSelectionClick(e) {
-  if (state.panelEl && state.panelEl.contains(e.target)) return;
-  const widget = findWidgetForElement(e.target);
+function onOverlayMove(e) {
+  const widget = resolveWidget(e.clientX, e.clientY);
+  if (widget) {
+    if (widget.widgetVar !== lastWidgetVar) {
+      lastWidgetVar = widget.widgetVar;
+      highlightElement(widget.id);
+      highlightCardInList(widget.widgetVar);
+    }
+  } else if (lastWidgetVar !== null) {
+    lastWidgetVar = null;
+    clearHighlight();
+  }
+}
+
+function onOverlayClick(e) {
+  const widget = resolveWidget(e.clientX, e.clientY);
   if (widget) {
     e.preventDefault();
     e.stopPropagation();
@@ -50,11 +75,10 @@ function onSelectionKeyDown(e) {
   if (e.key === 'Escape') deactivateSelectionMode();
 }
 
-let selectionCallbacks = {};
-
 export function activateSelectionMode(callbacks) {
   selectionCallbacks = callbacks || {};
   state.selectionMode = true;
+  lastWidgetVar = null;
   const btn = state.panelEl && state.panelEl.querySelector('#pfi-btn-select');
   if (btn) btn.classList.add('pfi-btn-active');
 
@@ -65,14 +89,17 @@ export function activateSelectionMode(callbacks) {
     }
   });
 
-  document.addEventListener('mouseover', onSelectionMouseOver, true);
-  document.addEventListener('mouseout',  onSelectionMouseOut,  true);
-  document.addEventListener('click',     onSelectionClick,     true);
-  document.addEventListener('keydown',   onSelectionKeyDown,   true);
+  overlayEl = document.createElement('div');
+  overlayEl.className = 'pfi-selection-overlay';
+  document.body.appendChild(overlayEl);
+  overlayEl.addEventListener('mousemove', onOverlayMove, true);
+  overlayEl.addEventListener('click', onOverlayClick, true);
+  document.addEventListener('keydown', onSelectionKeyDown, true);
 }
 
 export function deactivateSelectionMode() {
   state.selectionMode = false;
+  lastWidgetVar = null;
   const btn = state.panelEl && state.panelEl.querySelector('#pfi-btn-select');
   if (btn) btn.classList.remove('pfi-btn-active');
 
@@ -83,10 +110,13 @@ export function deactivateSelectionMode() {
   }
   clearHighlight();
 
-  document.removeEventListener('mouseover', onSelectionMouseOver, true);
-  document.removeEventListener('mouseout',  onSelectionMouseOut,  true);
-  document.removeEventListener('click',     onSelectionClick,     true);
-  document.removeEventListener('keydown',   onSelectionKeyDown,   true);
+  if (overlayEl) {
+    overlayEl.removeEventListener('mousemove', onOverlayMove, true);
+    overlayEl.removeEventListener('click', onOverlayClick, true);
+    overlayEl.remove();
+    overlayEl = null;
+  }
+  document.removeEventListener('keydown', onSelectionKeyDown, true);
 }
 
 export function toggleSelectionMode(callbacks) {

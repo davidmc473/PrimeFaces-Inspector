@@ -143,6 +143,11 @@
   color: var(--accent);
   border-color: var(--focus);
 }
+#pfi-btn-close:hover {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: rgba(248,81,73,.45);
+}
 
 /* ── Botón ícono genérico (overlays, forms) ── */
 .pfi-icon-btn {
@@ -224,8 +229,12 @@
   left: 9px;
   top: 50%;
   transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
   color: var(--text-3);
   display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
 }
 .pfi-search {
@@ -233,7 +242,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0 10px 0 30px;
+  padding: 0 10px 0 32px;
   height: 30px;
   color: var(--text);
   font-size: 12px;
@@ -297,6 +306,8 @@
   color: var(--text);
 }
 .pfi-filter-row:hover { background: var(--surface-2); }
+.pfi-filter-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.pfi-filter-row > span > svg { flex-shrink: 0; color: var(--accent); }
 .pfi-filter-row input[type=checkbox] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }
 .pfi-filter-empty { text-align: center; color: var(--text-3); font-size: 11px; padding: 8px; }
 .pfi-filter-footer {
@@ -374,17 +385,19 @@
 }
 
 .pfi-card-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
   background: var(--accent-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
   flex-shrink: 0;
   color: var(--accent);
-  font-family: var(--sans);
+}
+.pfi-card-icon > svg {
+  width: 20px;
+  height: 20px;
 }
 .pfi-card-body { flex: 1; min-width: 0; }
 .pfi-card-wvar {
@@ -886,35 +899,55 @@
 
 /* Color picker */
 .pfi-color-picker {
-  width: 32px;
-  height: 22px;
-  border: 1px solid var(--border);
+  width: 36px;
+  height: 24px;
+  border: 1px solid var(--border-2);
   border-radius: 4px;
-  background: var(--surface-2);
   padding: 0;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+  overflow: hidden;
 }
+.pfi-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.pfi-color-picker::-webkit-color-swatch { border: none; border-radius: 3px; }
+.pfi-color-picker::-moz-color-swatch { border: none; border-radius: 3px; }
 
 /* Toggle switch */
 .pfi-toggle {
   position: relative;
+  display: inline-block;
   width: 36px;
   height: 20px;
   flex-shrink: 0;
+  vertical-align: middle;
 }
-.pfi-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-.pfi-slider {
-  position: absolute;
-  inset: 0;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 20px;
+.pfi-toggle input {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  opacity: 0 !important;
   cursor: pointer;
+  z-index: 1;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pfi-slider {
+  position: absolute !important;
+  inset: 0 !important;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  pointer-events: none;
   transition: background .2s, border-color .2s;
 }
 .pfi-slider::before {
   content: '';
-  position: absolute;
+  position: absolute !important;
+  box-sizing: border-box;
   width: 14px;
   height: 14px;
   left: 2px;
@@ -1014,8 +1047,8 @@
   word-break: break-word;
 }
 .pfi-toast.pfi-toast-leaving { animation: pfi-toast-out .28s ease-in forwards; }
-.pfi-toast-ok  { background: var(--green-bg); border-color: rgba(63,185,80,.4);  color: var(--green); }
-.pfi-toast-err { background: var(--red-bg);   border-color: rgba(248,81,73,.4);  color: var(--red); }
+.pfi-toast-ok  { background: linear-gradient(var(--green-bg), var(--green-bg)), var(--surface); border-color: rgba(63,185,80,.55); color: var(--green); }
+.pfi-toast-err { background: linear-gradient(var(--red-bg), var(--red-bg)), var(--surface);   border-color: rgba(248,81,73,.55); color: var(--red); }
 .pfi-toast-text { flex: 1; }
 .pfi-toast-btn {
   background: transparent;
@@ -1054,18 +1087,38 @@
 .pfi-selection-candidate {
   outline: 2px dashed rgba(88,166,255,.5) !important;
   outline-offset: 1px !important;
-  cursor: crosshair !important;
-  pointer-events: auto !important;
 }
-.pfi-selection-candidate:hover {
-  outline: 2px solid #58a6ff !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 16px rgba(88,166,255,.35) !important;
-  z-index: 999999 !important;
-  position: relative;
+/* Capa transparente que captura hover/click por coordenadas. Permite
+   seleccionar incluso widgets deshabilitados, que no emiten eventos. */
+.pfi-selection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: transparent;
+  cursor: crosshair;
 }
-.pfi-selection-candidate * { pointer-events: none !important; }
-.pfi-selection-candidate .pfi-selection-candidate { pointer-events: auto !important; }
+
+/* ── Tooltips personalizados (atributo title) ── */
+.pfi-tooltip {
+  position: absolute;
+  z-index: 50;
+  max-width: 240px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-family: var(--sans);
+  box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  pointer-events: none;
+  white-space: normal;
+  word-break: break-word;
+  animation: pfi-fade-in .12s ease-out;
+}
+.pfi-tooltip[hidden] { display: none; }
+@keyframes pfi-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ── Drag ── */
 .pfi-drag-handle { cursor: move; user-select: none; }

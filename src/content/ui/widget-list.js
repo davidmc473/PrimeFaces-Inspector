@@ -35,7 +35,7 @@ export function renderFilterDropdown(callbacks) {
     const checked = state.selectedTypes.has(type) ? 'checked' : '';
     return `<label class="pfi-filter-row">
       <input type="checkbox" value="${escAttr(type)}" ${checked}>
-      <span>${getComponentIcon(type)} ${escHtml(type)}</span>
+      <span>${getComponentIcon(type, 14)} ${escHtml(type)}</span>
     </label>`;
   }).join('');
   listEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
