@@ -1,3 +1,4 @@
+"use strict";
 (() => {
   // src/content/core/config.js
   var DEFAULT_COLOR_UPDATE = "#ff00aa";
@@ -63,8 +64,10 @@
   `;
   }
 
-  // src/content/core/state.js
+  // src/content/core/state.ts
   var state = {
+    hostEl: null,
+    shadowRoot: null,
     panelEl: null,
     widgetsData: [],
     pageInfo: {
@@ -163,9 +166,43 @@
     });
   }
 
-  // src/content/core/messaging.js
+  // src/shared/messages.ts
+  var MSG = {
+    /** content → page: recolectar widgets */
+    COLLECT: "PF_INSPECTOR_COLLECT",
+    /** page → content: datos de widgets + info de la página */
+    DATA: "PF_INSPECTOR_DATA",
+    /** page → content: interceptada una llamada PrimeFaces.ab() */
+    AJAX: "PF_INSPECTOR_AJAX",
+    /** page → content: ids actualizados en una respuesta Ajax */
+    UPDATE: "PF_INSPECTOR_UPDATE",
+    /** content → page: ejecutar un método del Client API */
+    EXEC_API: "PF_INSPECTOR_EXEC_API",
+    /** content → page: disparar un evento inline (atributo on*) */
+    EXEC_EVENT: "PF_INSPECTOR_EXEC_EVENT",
+    /** page → content: resultado de EXEC_API / EXEC_EVENT */
+    EXEC_RESULT: "PF_INSPECTOR_EXEC_RESULT",
+    /** content → page: instalar los hooks de Ajax sin recolectar */
+    HOOK_AJAX: "PF_INSPECTOR_HOOK_AJAX",
+    /** page → content: el page script está cargado */
+    READY: "PF_INSPECTOR_READY"
+  };
+  function collectMessage(showJqueryEvents) {
+    return { type: MSG.COLLECT, showJqueryEvents };
+  }
+  function execApiMessage(widgetVar, method, args, callId) {
+    return { type: MSG.EXEC_API, widgetVar, method, args, callId };
+  }
+  function execEventMessage(ownerId, eventAttr, widgetVar) {
+    return { type: MSG.EXEC_EVENT, ownerId, eventAttr, widgetVar };
+  }
+  function postInspectorMessage(msg) {
+    window.postMessage(msg, "*");
+  }
+
+  // src/content/core/messaging.ts
   function requestWidgets() {
-    window.postMessage({ type: "PF_INSPECTOR_COLLECT", showJqueryEvents: !!config.showJqueryEvents }, "*");
+    postInspectorMessage(collectMessage(!!config.showJqueryEvents));
   }
   function executeWidgetAction(widgetVar, method, args, callback) {
     const callId = "c" + ++state.callSeq;
@@ -173,16 +210,10 @@
       state.pendingResultCallbacks.set(callId, callback);
       setTimeout(() => state.pendingResultCallbacks.delete(callId), 1e4);
     }
-    window.postMessage({
-      type: "PF_INSPECTOR_EXEC_API",
-      widgetVar,
-      method,
-      args: Array.isArray(args) ? args : [],
-      callId
-    }, "*");
+    postInspectorMessage(execApiMessage(widgetVar, method, Array.isArray(args) ? args : [], callId));
   }
   function executeInlineEvent(ownerId, eventAttr, widgetVar) {
-    window.postMessage({ type: "PF_INSPECTOR_EXEC_EVENT", ownerId, eventAttr, widgetVar }, "*");
+    postInspectorMessage(execEventMessage(ownerId, eventAttr, widgetVar));
   }
   function injectPageScript() {
     if (document.getElementById("pf-inspector-page-script")) return;
@@ -1137,7 +1168,8 @@
     });
     document.addEventListener("click", (e) => {
       if (!panelEl) return;
-      if (!filterDropdown.hidden && !filterDropdown.contains(e.target) && e.target !== filterBtn) {
+      const path = e.composedPath();
+      if (!filterDropdown.hidden && !path.includes(filterDropdown) && !path.includes(filterBtn)) {
         filterDropdown.hidden = true;
       }
     });
@@ -1369,6 +1401,11 @@
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
+  function isPanelNode(el) {
+    if (!el) return false;
+    if (state.hostEl && (el === state.hostEl || state.hostEl.contains(el))) return true;
+    return !!(state.panelEl && state.panelEl.contains(el));
+  }
   function elementUnderPointer(x, y) {
     if (!overlayEl) return null;
     overlayEl.style.pointerEvents = "none";
@@ -1379,7 +1416,7 @@
   function resolveWidget(x, y) {
     const el = elementUnderPointer(x, y);
     if (!el) return null;
-    if (state.panelEl && state.panelEl.contains(el)) return null;
+    if (isPanelNode(el)) return null;
     return findWidgetForElement(el);
   }
   function onOverlayMove(e) {
@@ -1415,7 +1452,7 @@
     if (btn) btn.classList.add("pfi-btn-active");
     state.widgetsData.forEach((w) => {
       const el = document.getElementById(w.id);
-      if (el && !(state.panelEl && state.panelEl.contains(el))) {
+      if (el && !isPanelNode(el)) {
         el.classList.add("pfi-selection-candidate");
       }
     });
@@ -1517,7 +1554,21 @@
     panelEl.addEventListener("scroll", hideTip, true);
   }
 
+  // src/styles/panel.css
+  var panel_default = "/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n   PrimeFaces Inspector \u2014 Estilos del panel (Shadow DOM)\n   Esta hoja se inyecta DENTRO del ShadowRoot del panel, por lo que\n   el CSS de la p\xE1gina no puede pisarla (ni al rev\xE9s). Los estilos\n   que se aplican a elementos de la p\xE1gina viven en page.css.\n   Tema oscuro por defecto; .pfi-theme-light invierte las variables\n   \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */\n\n/* \u2500\u2500 Variables del tema \u2500\u2500 */\n#pf-inspector-panel {\n  --bg:          #0d1117;\n  --surface:     #161b22;\n  --surface-2:   #21262d;\n  --border:      #30363d;\n  --border-2:    #444c56;\n  --focus:       #58a6ff;\n\n  --text:        #e6edf3;\n  --text-2:      #8b949e;\n  --text-3:      #484f58;\n\n  --accent:      #58a6ff;\n  --accent-bg:   rgba(88,166,255,.12);\n  --green:       #3fb950;\n  --green-bg:    rgba(63,185,80,.12);\n  --red:         #f85149;\n  --red-bg:      rgba(248,81,73,.12);\n  --yellow:      #d29922;\n  --yellow-bg:   rgba(210,153,34,.12);\n  --orange:      #f97316;\n  --orange-bg:   rgba(249,115,22,.12);\n  --pink:        #f778ba;\n\n  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Courier New', monospace;\n  --sans: 'Segoe UI', system-ui, -apple-system, sans-serif;\n  --radius: 8px;\n  --radius-sm: 5px;\n}\n\n#pf-inspector-panel.pfi-theme-light {\n  --bg:          #ffffff;\n  --surface:     #f6f8fa;\n  --surface-2:   #eaeef2;\n  --border:      #d0d7de;\n  --border-2:    #afb8c1;\n  --focus:       #0969da;\n\n  --text:        #1f2328;\n  --text-2:      #636c76;\n  --text-3:      #8c959f;\n\n  --accent:      #0969da;\n  --accent-bg:   rgba(9,105,218,.10);\n  --green:       #1a7f37;\n  --green-bg:    rgba(26,127,55,.10);\n  --red:         #d1242f;\n  --red-bg:      rgba(209,36,47,.10);\n  --yellow:      #9a6700;\n  --yellow-bg:   rgba(154,103,0,.10);\n  --orange:      #bc4c00;\n  --orange-bg:   rgba(188,76,0,.10);\n  --pink:        #bf4b8a;\n}\n\n/* \u2500\u2500 Panel principal \u2500\u2500 */\n#pf-inspector-panel {\n  position: fixed;\n  top: 10px;\n  right: 10px;\n  width: 390px;\n  max-height: calc(100vh - 20px);\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);\n  z-index: 2147483647;\n  font-family: var(--sans);\n  font-size: 13px;\n  color: var(--text);\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n#pf-inspector-panel * {\n  box-sizing: border-box;\n}\n\n/* \u2500\u2500 Header \u2500\u2500 */\n.pfi-header {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-logo {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n}\n.pfi-title {\n  flex: 1;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  letter-spacing: -.01em;\n}\n.pfi-count {\n  font-size: 11px;\n  color: var(--text-3);\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: 20px;\n  padding: 0 7px;\n  line-height: 18px;\n  margin-right: 2px;\n  font-variant-numeric: tabular-nums;\n}\n\n/* \u2500\u2500 Botones del header \u2500\u2500 */\n.pfi-header-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s, border-color .13s;\n  flex-shrink: 0;\n}\n.pfi-header-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n.pfi-header-btn.pfi-btn-active {\n  background: var(--accent-bg);\n  color: var(--accent);\n  border-color: var(--focus);\n}\n#pfi-btn-close:hover {\n  background: var(--red-bg);\n  color: var(--red);\n  border-color: rgba(248,81,73,.45);\n}\n\n/* \u2500\u2500 Bot\xF3n \xEDcono gen\xE9rico (overlays, forms) \u2500\u2500 */\n.pfi-icon-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s;\n  flex-shrink: 0;\n}\n.pfi-icon-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n\n/* \u2500\u2500 Info bar \u2500\u2500 */\n.pfi-info-bar {\n  display: flex;\n  align-items: flex-start;\n  gap: 8px;\n  padding: 5px 12px;\n  font-size: 11px;\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-info-bar:empty { display: none; }\n\n.pfi-info-bar.pfi-info-ok {\n  background: var(--green-bg);\n  color: var(--green);\n}\n.pfi-info-bar.pfi-info-warn {\n  background: var(--yellow-bg);\n  color: var(--yellow);\n}\n.pfi-info-icon {\n  display: flex;\n  align-items: center;\n  flex-shrink: 0;\n  margin-top: 1px;\n}\n.pfi-info-lines {\n  display: flex;\n  flex-direction: column;\n  gap: 1px;\n  flex: 1;\n  min-width: 0;\n}\n.pfi-info-main  { font-weight: 600; }\n.pfi-info-sub   { opacity: .8; }\n.pfi-info-muted { color: var(--text-3); opacity: 1; }\n.pfi-info-warn-text { color: var(--yellow); }\n\n/* \u2500\u2500 Barra de b\xFAsqueda \u2500\u2500 */\n.pfi-toolbar {\n  display: flex;\n  gap: 6px;\n  padding: 8px 10px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n  position: relative;\n}\n.pfi-search-wrap {\n  flex: 1;\n  position: relative;\n  min-width: 0;\n}\n.pfi-search-icon {\n  position: absolute;\n  left: 9px;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 15px;\n  height: 15px;\n  color: var(--text-3);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  pointer-events: none;\n}\n.pfi-search {\n  width: 100%;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 10px 0 32px;\n  height: 30px;\n  color: var(--text);\n  font-size: 12px;\n  font-family: var(--sans);\n  outline: none;\n  transition: border-color .15s;\n}\n.pfi-search:focus { border-color: var(--focus); }\n.pfi-search::placeholder { color: var(--text-3); }\n\n/* \u2500\u2500 Multi-filtro \u2500\u2500 */\n.pfi-multi-filter {\n  position: relative;\n  flex-shrink: 0;\n  height: 30px;\n}\n.pfi-filter-btn {\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 8px;\n  height: 30px;\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  min-width: 100px;\n  max-width: 140px;\n  transition: border-color .13s, color .13s;\n}\n.pfi-filter-btn:hover { border-color: var(--border-2); color: var(--text); }\n.pfi-filter-btn > span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n.pfi-filter-dropdown {\n  position: absolute;\n  right: 0;\n  top: calc(100% + 4px);\n  width: 220px;\n  max-height: 260px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 24px rgba(0,0,0,.4);\n  z-index: 10;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-filter-dropdown[hidden] { display: none; }\n.pfi-filter-list { flex: 1; overflow-y: auto; padding: 4px 0; }\n.pfi-filter-row {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 5px 10px;\n  cursor: pointer;\n  font-size: 12px;\n  color: var(--text);\n}\n.pfi-filter-row:hover { background: var(--surface-2); }\n.pfi-filter-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }\n.pfi-filter-row > span > svg { flex-shrink: 0; color: var(--accent); }\n.pfi-filter-row input[type=checkbox] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }\n.pfi-filter-empty { text-align: center; color: var(--text-3); font-size: 11px; padding: 8px; }\n.pfi-filter-footer {\n  border-top: 1px solid var(--border);\n  padding: 4px 8px;\n  text-align: right;\n}\n\n/* \u2500\u2500 Lista de widgets \u2500\u2500 */\n.pfi-list {\n  flex: 1;\n  overflow-y: auto;\n  padding: 6px;\n  min-height: 60px;\n}\n.pfi-empty {\n  text-align: center;\n  padding: 32px 16px;\n  color: var(--text-3);\n  font-size: 12px;\n}\n\n/* Scrollbars */\n.pfi-list::-webkit-scrollbar,\n.pfi-filter-list::-webkit-scrollbar,\n.pfi-cfg-body::-webkit-scrollbar,\n.pfi-overlay-body::-webkit-scrollbar {\n  width: 4px;\n}\n.pfi-list::-webkit-scrollbar-track,\n.pfi-filter-list::-webkit-scrollbar-track,\n.pfi-cfg-body::-webkit-scrollbar-track {\n  background: transparent;\n}\n.pfi-list::-webkit-scrollbar-thumb,\n.pfi-filter-list::-webkit-scrollbar-thumb,\n.pfi-cfg-body::-webkit-scrollbar-thumb {\n  background: var(--border-2);\n  border-radius: 4px;\n}\n\n/* \u2500\u2500 Tarjeta de widget \u2500\u2500 */\n.pfi-card {\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  margin-bottom: 4px;\n  transition: border-color .13s;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-card:hover { border-color: var(--border-2); }\n.pfi-card.pfi-expanded {\n  border-color: var(--focus);\n  box-shadow: 0 0 0 1px var(--focus) inset, 0 2px 8px rgba(0,0,0,.2);\n}\n.pfi-card-selected {\n  border-color: var(--accent) !important;\n  box-shadow: 0 0 0 2px var(--accent-bg);\n}\n\n.pfi-card-head {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  cursor: pointer;\n  user-select: none;\n}\n.pfi-card-head:hover { background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-card-head {\n  background: var(--surface-2);\n  border-bottom: 1px solid var(--border);\n}\n\n.pfi-card-icon {\n  width: 34px;\n  height: 34px;\n  border-radius: 7px;\n  background: var(--accent-bg);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  color: var(--accent);\n}\n.pfi-card-icon > svg {\n  width: 20px;\n  height: 20px;\n}\n.pfi-card-body { flex: 1; min-width: 0; }\n.pfi-card-wvar {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-card-id {\n  font-size: 10px;\n  color: var(--text-3);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  margin-top: 1px;\n  font-family: var(--mono);\n}\n\n/* Chevron */\n.pfi-chevron {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-3);\n  width: 24px;\n  height: 24px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: color .13s, transform .18s ease;\n}\n.pfi-chevron:hover { color: var(--text); background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-chevron { transform: rotate(90deg); color: var(--accent); }\n\n/* \u2500\u2500 Detalle del acorde\xF3n \u2500\u2500 */\n.pfi-card-detail {\n  padding: 10px 12px 12px;\n  animation: pfi-slide-in .2s ease-out;\n  overflow: hidden;\n}\n.pfi-card-detail[hidden] { display: none; }\n@keyframes pfi-slide-in {\n  from { opacity: 0; transform: translateY(-3px); }\n  to   { opacity: 1; transform: translateY(0); }\n}\n\n/* \u2500\u2500 Secciones del detalle \u2500\u2500 */\n.pfi-detail-section { margin-bottom: 14px; }\n.pfi-detail-section:last-child { margin-bottom: 0; }\n.pfi-detail-section h4 {\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n  color: var(--text-2);\n  margin: 0 0 7px 0;\n  padding-bottom: 5px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-detail-row {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 4px;\n  font-size: 12px;\n  align-items: baseline;\n}\n.pfi-detail-label { color: var(--text-2); min-width: 76px; flex-shrink: 0; }\n.pfi-detail-value { color: var(--text); word-break: break-all; }\n.pfi-mono { font-family: var(--mono); font-size: 11.5px; }\n.pfi-target-link {\n  color: var(--orange);\n  cursor: pointer;\n  text-decoration: underline;\n  text-decoration-style: dotted;\n}\n.pfi-target-link:hover { color: var(--yellow); }\n\n/* \u2500\u2500 Metadata \u2500\u2500 */\n.pfi-meta-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.pfi-meta-cell {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  padding: 5px 7px;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-size: 11px;\n  min-width: 0;\n}\n.pfi-meta-key {\n  color: var(--text-2);\n  font-size: 10px;\n  font-family: var(--mono);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-meta-true  { color: var(--green);  font-weight: 600; font-family: var(--mono); }\n.pfi-meta-false { color: var(--red);    font-weight: 600; font-family: var(--mono); }\n.pfi-meta-null  { color: var(--text-3); font-family: var(--mono); }\n.pfi-meta-text  { color: var(--yellow); font-family: var(--mono); word-break: break-all; }\n\n/* \u2500\u2500 Client API \u2014 botones ejecutables \u2500\u2500 */\n.pfi-actions-grid {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-action-btn {\n  background: var(--accent-bg);\n  border: 1px solid rgba(88,166,255,.25);\n  border-radius: var(--radius-sm);\n  padding: 4px 10px;\n  min-height: 28px;\n  color: var(--accent);\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-action-btn:hover {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: #fff;\n}\n.pfi-action-btn:active { transform: scale(.97); }\n.pfi-action-btn.pfi-action-btn-disabled,\n.pfi-action-btn[disabled] {\n  opacity: .4;\n  cursor: not-allowed;\n}\n.pfi-action-btn.pfi-action-btn-disabled:hover,\n.pfi-action-btn[disabled]:hover {\n  background: var(--accent-bg);\n  border-color: rgba(88,166,255,.25);\n  color: var(--accent);\n  transform: none;\n}\n.pfi-action-icon { display: flex; align-items: center; }\n\n/* Botones con argumentos */\n.pfi-api-arg-methods {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-mt { margin-top: 6px; }\n.pfi-api-method-btn {\n  background: var(--orange-bg);\n  border: 1px solid rgba(249,115,22,.25);\n  color: var(--orange);\n  padding: 4px 10px;\n  min-height: 28px;\n  border-radius: var(--radius-sm);\n  cursor: pointer;\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-api-method-btn:hover {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-api-method-btn.pfi-api-method-active {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-arity {\n  font-size: 10px;\n  background: rgba(0,0,0,.25);\n  border-radius: 3px;\n  padding: 0 3px;\n  margin-left: 1px;\n}\n\n/* \u2500\u2500 Mini-form de argumentos \u2500\u2500 */\n.pfi-api-form-host { margin-top: 8px; }\n.pfi-api-form {\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius);\n  padding: 10px;\n  margin-top: 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-api-form-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.pfi-api-form-title {\n  font-family: var(--mono);\n  font-size: 11px;\n  color: var(--orange);\n  word-break: break-all;\n  flex: 1;\n}\n.pfi-api-form-hint { font-size: 10.5px; color: var(--text-3); }\n.pfi-api-form-body { display: flex; flex-direction: column; gap: 6px; }\n.pfi-arg-row { display: flex; align-items: center; gap: 8px; }\n.pfi-arg-label { font-size: 10.5px; color: var(--text-2); min-width: 44px; font-family: var(--mono); }\n.pfi-arg-input {\n  flex: 1;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  font-family: var(--mono);\n  outline: none;\n  transition: border-color .13s;\n}\n.pfi-arg-input:focus { border-color: var(--orange); }\n.pfi-api-form-footer { display: flex; justify-content: flex-end; }\n\n/* \u2500\u2500 Botones secundarios / ghost \u2500\u2500 */\n.pfi-ghost-btn {\n  background: none;\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  padding: 3px 8px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  transition: background .13s, color .13s;\n}\n.pfi-ghost-btn:hover { background: var(--surface-2); color: var(--text); }\n\n/* Bot\xF3n ejecutar principal */\n.pfi-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  color: var(--green);\n  border-radius: var(--radius-sm);\n  padding: 5px 12px;\n  font-size: 11.5px;\n  font-weight: 600;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s;\n}\n.pfi-exec-btn:hover {\n  background: var(--green);\n  border-color: var(--green);\n  color: #fff;\n}\n\n/* \u2500\u2500 Resultado del form \u2500\u2500 */\n.pfi-api-result {\n  margin-top: 2px;\n  padding: 8px;\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  border: 1px solid;\n}\n.pfi-api-result[hidden] { display: none; }\n.pfi-api-result-pending { background: var(--yellow-bg); border-color: rgba(210,153,34,.3); color: var(--yellow); }\n.pfi-api-result-ok      { background: var(--green-bg);  border-color: rgba(63,185,80,.3);  color: var(--green); }\n.pfi-api-result-err     { background: var(--red-bg);    border-color: rgba(248,81,73,.3);  color: var(--red); }\n.pfi-api-result-header  { font-weight: 600; margin-bottom: 5px; }\n.pfi-api-result-actions { display: flex; gap: 6px; margin-top: 6px; }\n\n/* \u2500\u2500 Eventos \u2500\u2500 */\n.pfi-event-block {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 8px;\n  margin-bottom: 6px;\n}\n.pfi-event-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  margin-bottom: 5px;\n}\n.pfi-event-name {\n  font-weight: 600;\n  color: var(--pink);\n  font-size: 12px;\n  flex: 1;\n  font-family: var(--mono);\n  word-break: break-all;\n}\n.pfi-event-badge {\n  font-size: 9px;\n  padding: 1px 6px;\n  border-radius: 20px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n  font-weight: 600;\n  flex-shrink: 0;\n}\n.pfi-event-badge-inline  { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(88,166,255,.3); }\n.pfi-event-badge-jquery  { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(249,115,22,.3); }\n.pfi-event-raw {\n  font-size: 10px;\n  color: var(--text-3);\n  word-break: break-all;\n  margin-bottom: 6px;\n  font-family: var(--mono);\n  padding: 4px 6px;\n  background: var(--bg);\n  border-radius: 4px;\n  max-height: 56px;\n  overflow-y: auto;\n}\n.pfi-event-owner {\n  font-size: 10px;\n  color: var(--text-2);\n  font-family: var(--mono);\n  margin: 0 0 4px 4px;\n  word-break: break-all;\n}\n.pfi-events-empty { font-size: 11px; color: var(--text-3); font-style: italic; padding: 3px 0; }\n.pfi-hint {\n  font-size: 11px;\n  color: var(--yellow);\n  background: var(--yellow-bg);\n  border: 1px dashed rgba(210,153,34,.35);\n  border-radius: var(--radius-sm);\n  padding: 6px 8px;\n  margin-top: 6px;\n}\n.pfi-hint-clickable { cursor: pointer; }\n.pfi-hint-clickable:hover { background: rgba(210,153,34,.2); }\n\n/* \u2500\u2500 Tabla de par\xE1metros \u2500\u2500 */\n.pfi-param-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 11px;\n}\n.pfi-param-table th {\n  text-align: left;\n  color: var(--text-3);\n  border-bottom: 1px solid var(--border);\n  padding: 3px 4px;\n  font-weight: 600;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n}\n.pfi-param-table td {\n  padding: 3px 4px;\n  border-bottom: 1px solid var(--border);\n  color: var(--text);\n  font-family: var(--mono);\n}\n.pfi-param-table td:first-child { color: var(--yellow); font-weight: 700; }\n.pfi-param-table td:nth-child(2) { color: var(--accent); }\n.pfi-param-desc { color: var(--text-3) !important; font-size: 10px; font-family: var(--sans) !important; }\n.pfi-event-row { cursor: crosshair; transition: background .1s; }\n.pfi-event-row:hover,\n.pfi-event-row.pfi-event-row-active { background: rgba(210,153,34,.08); }\n\n/* \u2500\u2500 Bot\xF3n ejecutar evento \u2500\u2500 */\n.pfi-event-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  border-radius: 4px;\n  color: var(--green);\n  width: 22px;\n  height: 22px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: background .13s, color .13s;\n}\n.pfi-event-exec-btn:hover { background: var(--green); color: #fff; }\n\n/* \u2500\u2500 Overlay header compartido (config, modal) \u2500\u2500 */\n.pfi-overlay-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-overlay-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  flex: 1;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n\n/* \u2500\u2500 Panel de configuraci\xF3n \u2500\u2500 */\n.pfi-config-overlay {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  z-index: 11;\n  display: flex;\n  flex-direction: column;\n  animation: pfi-slide-in .15s ease-out;\n}\n.pfi-cfg-body {\n  flex: 1;\n  overflow-y: auto;\n  padding: 8px 0;\n}\n\n/* Secciones de config */\n.pfi-cfg-section {\n  padding: 8px 14px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-cfg-section:last-of-type { border-bottom: none; }\n.pfi-cfg-section-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 8px;\n  padding-top: 2px;\n}\n\n/* Filas de configuraci\xF3n */\n.pfi-cfg-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 7px 0;\n  gap: 12px;\n}\n.pfi-cfg-text { flex: 1; min-width: 0; }\n.pfi-cfg-label { font-size: 12.5px; color: var(--text); font-weight: 500; }\n.pfi-cfg-desc  { font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.3; }\n.pfi-cfg-control { flex-shrink: 0; }\n\n/* Color row */\n.pfi-cfg-color-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 5px 0 5px 12px;\n  gap: 10px;\n}\n.pfi-cfg-reset-row { padding: 5px 0; }\n\n/* Select */\n.pfi-select {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  font-family: var(--sans);\n  padding: 4px 8px;\n  outline: none;\n  cursor: pointer;\n  transition: border-color .13s;\n}\n.pfi-select:focus { border-color: var(--focus); }\n\n/* Color picker */\n.pfi-color-picker {\n  width: 36px;\n  height: 24px;\n  border: 1px solid var(--border-2);\n  border-radius: 4px;\n  padding: 0;\n  cursor: pointer;\n  -webkit-appearance: none;\n  appearance: none;\n  background: none;\n  overflow: hidden;\n}\n.pfi-color-picker::-webkit-color-swatch-wrapper { padding: 0; }\n.pfi-color-picker::-webkit-color-swatch { border: none; border-radius: 3px; }\n.pfi-color-picker::-moz-color-swatch { border: none; border-radius: 3px; }\n\n/* Toggle switch */\n.pfi-toggle {\n  position: relative;\n  display: inline-block;\n  width: 36px;\n  height: 20px;\n  flex-shrink: 0;\n  vertical-align: middle;\n}\n.pfi-toggle input {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  margin: 0;\n  opacity: 0;\n  cursor: pointer;\n  z-index: 1;\n  -webkit-appearance: none;\n  appearance: none;\n}\n.pfi-slider {\n  position: absolute;\n  inset: 0;\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: 20px;\n  pointer-events: none;\n  transition: background .2s, border-color .2s;\n}\n.pfi-slider::before {\n  content: '';\n  position: absolute;\n  box-sizing: border-box;\n  width: 14px;\n  height: 14px;\n  left: 2px;\n  top: 2px;\n  background: var(--text-2);\n  border-radius: 50%;\n  transition: transform .2s, background .2s;\n}\n.pfi-toggle input:checked + .pfi-slider { background: var(--accent); border-color: var(--accent); }\n.pfi-toggle input:checked + .pfi-slider::before { transform: translateX(16px); background: #fff; }\n\n/* About section */\n.pfi-cfg-about {\n  padding: 12px 14px;\n}\n.pfi-cfg-about-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 10px;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n}\n.pfi-cfg-about-row {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  font-size: 12px;\n  padding: 4px 0;\n  color: var(--text-2);\n}\n.pfi-link {\n  color: var(--accent);\n  text-decoration: none;\n  font-size: 12px;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n.pfi-link:hover { text-decoration: underline; }\n\n/* \u2500\u2500 Modal de resultado \u2500\u2500 */\n.pfi-result-modal {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  display: flex;\n  flex-direction: column;\n  z-index: 25;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-result-body {\n  flex: 1;\n  overflow: auto;\n  padding: 12px;\n}\n.pfi-result-pre {\n  margin: 0;\n  padding: 10px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-family: var(--mono);\n  font-size: 11.5px;\n  color: var(--text);\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n\n/* \u2500\u2500 Toast stack \u2500\u2500 */\n.pfi-toast-stack {\n  position: absolute;\n  bottom: 10px;\n  left: 10px;\n  right: 10px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  pointer-events: none;\n  z-index: 30;\n}\n.pfi-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  border-radius: var(--radius-sm);\n  border: 1px solid;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: 0 4px 16px rgba(0,0,0,.4);\n  animation: pfi-toast-in .22s ease-out;\n  word-break: break-word;\n}\n.pfi-toast.pfi-toast-leaving { animation: pfi-toast-out .28s ease-in forwards; }\n.pfi-toast-ok  { background: linear-gradient(var(--green-bg), var(--green-bg)), var(--surface); border-color: rgba(63,185,80,.55); color: var(--green); }\n.pfi-toast-err { background: linear-gradient(var(--red-bg), var(--red-bg)), var(--surface);   border-color: rgba(248,81,73,.55); color: var(--red); }\n.pfi-toast-text { flex: 1; }\n.pfi-toast-btn {\n  background: transparent;\n  border: 1px solid currentColor;\n  color: inherit;\n  border-radius: 4px;\n  padding: 2px 6px;\n  cursor: pointer;\n  font-size: 11px;\n  font-family: var(--sans);\n  opacity: .8;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n}\n.pfi-toast-btn:hover { opacity: 1; background: rgba(255,255,255,.08); }\n.pfi-toast-close { padding: 2px 4px; }\n\n@keyframes pfi-toast-in  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }\n@keyframes pfi-toast-out { to { opacity: 0; transform: translateY(6px); } }\n\n/* \u2500\u2500 Tooltips personalizados (atributo title) \u2500\u2500 */\n.pfi-tooltip {\n  position: absolute;\n  z-index: 50;\n  max-width: 240px;\n  background: var(--surface-2);\n  color: var(--text);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  line-height: 1.35;\n  font-family: var(--sans);\n  box-shadow: 0 4px 14px rgba(0,0,0,.45);\n  pointer-events: none;\n  white-space: normal;\n  word-break: break-word;\n  animation: pfi-fade-in .12s ease-out;\n}\n.pfi-tooltip[hidden] { display: none; }\n@keyframes pfi-fade-in { from { opacity: 0; } to { opacity: 1; } }\n\n/* \u2500\u2500 Drag \u2500\u2500 */\n.pfi-drag-handle { cursor: move; user-select: none; }\n";
+
   // src/content/ui/panel.js
+  function mountShadowHost() {
+    state.hostEl = document.createElement("div");
+    state.hostEl.id = "pf-inspector-host";
+    state.hostEl.style.all = "initial";
+    state.shadowRoot = state.hostEl.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = panel_default;
+    state.shadowRoot.appendChild(style);
+    document.body.appendChild(state.hostEl);
+    return state.shadowRoot;
+  }
   function applyTheme() {
     if (!state.panelEl) return;
     if (config.theme === "light") state.panelEl.classList.add("pfi-theme-light");
@@ -1579,6 +1630,7 @@
       saveConfig();
       return;
     }
+    const shadowRoot = mountShadowHost();
     state.panelEl = document.createElement("div");
     state.panelEl.id = "pf-inspector-panel";
     state.panelEl.innerHTML = `
@@ -1606,7 +1658,7 @@
     toastStack.className = "pfi-toast-stack";
     toastStack.id = "pfi-toast-stack";
     state.panelEl.appendChild(toastStack);
-    document.body.appendChild(state.panelEl);
+    shadowRoot.appendChild(state.panelEl);
     state.panelEl.querySelector("#pfi-btn-close").addEventListener("click", closePanel);
     state.panelEl.querySelector("#pfi-btn-refresh").addEventListener("click", requestWidgets);
     state.panelEl.querySelector("#pfi-btn-config").addEventListener("click", () => showConfig(buildConfigCallbacks()));
@@ -1636,10 +1688,12 @@
   }
   function destroyPanel() {
     if (state.selectionMode) deactivateSelectionMode();
-    if (state.panelEl) {
-      state.panelEl.remove();
-      state.panelEl = null;
+    if (state.hostEl) {
+      state.hostEl.remove();
+      state.hostEl = null;
+      state.shadowRoot = null;
     }
+    state.panelEl = null;
   }
   function togglePfDependentUi() {
     if (!state.panelEl) return;
@@ -1700,6 +1754,7 @@
     }, onGlobalKeyUp = function(e) {
       if (!e.ctrlKey || !e.shiftKey) state.ctrlShiftFired = false;
     };
+    handleExecResult2 = handleExecResult, onGlobalKeyDown2 = onGlobalKeyDown, onGlobalKeyUp2 = onGlobalKeyUp;
     window.__pfInspectorLoaded = true;
     loadConfig(() => {
       applyDynamicColors();
@@ -1713,18 +1768,18 @@
     window.addEventListener("message", (event) => {
       if (event.source !== window || !event.data || !event.data.type) return;
       switch (event.data.type) {
-        case "PF_INSPECTOR_DATA":
+        case MSG.DATA:
           state.widgetsData = event.data.data || [];
           if (event.data.info) Object.assign(state.pageInfo, event.data.info);
           refreshPanel();
           break;
-        case "PF_INSPECTOR_AJAX":
+        case MSG.AJAX:
           handleAjaxProcess(event.data.data);
           break;
-        case "PF_INSPECTOR_UPDATE":
+        case MSG.UPDATE:
           handleAjaxUpdate(event.data.data);
           break;
-        case "PF_INSPECTOR_EXEC_RESULT":
+        case MSG.EXEC_RESULT:
           handleExecResult(event.data.data);
           break;
       }
@@ -1753,4 +1808,7 @@
     });
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
+  var handleExecResult2;
+  var onGlobalKeyDown2;
+  var onGlobalKeyUp2;
 })();

@@ -1,3 +1,4 @@
+"use strict";
 (() => {
   // src/background/background.js
   chrome.action.onClicked.addListener(async (tab) => {

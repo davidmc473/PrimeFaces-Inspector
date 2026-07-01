@@ -29,6 +29,14 @@ function highlightCardInList(widgetVar) {
   }
 }
 
+/* El panel vive en un Shadow DOM: document.elementFromPoint devuelve su
+   host, no los elementos internos, así que basta con comprobar el host. */
+function isPanelNode(el) {
+  if (!el) return false;
+  if (state.hostEl && (el === state.hostEl || state.hostEl.contains(el))) return true;
+  return !!(state.panelEl && state.panelEl.contains(el));
+}
+
 /* El overlay se ignora momentáneamente para identificar el elemento real
    bajo el cursor — funciona incluso con widgets deshabilitados, que de otro
    modo no emiten eventos de ratón. */
@@ -43,7 +51,7 @@ function elementUnderPointer(x, y) {
 function resolveWidget(x, y) {
   const el = elementUnderPointer(x, y);
   if (!el) return null;
-  if (state.panelEl && state.panelEl.contains(el)) return null;
+  if (isPanelNode(el)) return null;
   return findWidgetForElement(el);
 }
 
@@ -84,7 +92,7 @@ export function activateSelectionMode(callbacks) {
 
   state.widgetsData.forEach(w => {
     const el = document.getElementById(w.id);
-    if (el && !(state.panelEl && state.panelEl.contains(el))) {
+    if (el && !isPanelNode(el)) {
       el.classList.add('pfi-selection-candidate');
     }
   });

@@ -1,5 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
-   PrimeFaces Inspector — Estilos del panel
+   PrimeFaces Inspector — Estilos del panel (Shadow DOM)
+   Esta hoja se inyecta DENTRO del ShadowRoot del panel, por lo que
+   el CSS de la página no puede pisarla (ni al revés). Los estilos
+   que se aplican a elementos de la página viven en page.css.
    Tema oscuro por defecto; .pfi-theme-light invierte las variables
    ═══════════════════════════════════════════════════════════════ */
 
@@ -924,20 +927,20 @@
   vertical-align: middle;
 }
 .pfi-toggle input {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  opacity: 0 !important;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
   cursor: pointer;
   z-index: 1;
   -webkit-appearance: none;
   appearance: none;
 }
 .pfi-slider {
-  position: absolute !important;
-  inset: 0 !important;
+  position: absolute;
+  inset: 0;
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   border-radius: 20px;
@@ -946,7 +949,7 @@
 }
 .pfi-slider::before {
   content: '';
-  position: absolute !important;
+  position: absolute;
   box-sizing: border-box;
   width: 14px;
   height: 14px;
@@ -1070,33 +1073,6 @@
 
 @keyframes pfi-toast-in  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pfi-toast-out { to { opacity: 0; transform: translateY(6px); } }
-
-/* ── Highlights de elementos en la página ── */
-.pfi-highlight-hover {
-  outline: 2px solid #58a6ff !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 12px rgba(88,166,255,.3) !important;
-}
-.pfi-highlight-target {
-  outline: 2px dashed #f97316 !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 12px rgba(249,115,22,.3) !important;
-}
-
-/* ── Modo selección ── */
-.pfi-selection-candidate {
-  outline: 2px dashed rgba(88,166,255,.5) !important;
-  outline-offset: 1px !important;
-}
-/* Capa transparente que captura hover/click por coordenadas. Permite
-   seleccionar incluso widgets deshabilitados, que no emiten eventos. */
-.pfi-selection-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483646;
-  background: transparent;
-  cursor: crosshair;
-}
 
 /* ── Tooltips personalizados (atributo title) ── */
 .pfi-tooltip {

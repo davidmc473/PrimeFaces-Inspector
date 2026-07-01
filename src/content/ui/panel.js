@@ -13,6 +13,23 @@ import { showConfig } from './config-panel.js';
 import { showToast, showResultModal } from './toast.js';
 import { toggleSelectionMode, deactivateSelectionMode } from './selection.js';
 import { initTooltips } from './tooltip.js';
+import panelCss from '../../styles/panel.css';
+
+/* El panel vive dentro de un ShadowRoot para que el CSS de la página no
+   pueda pisarlo (y viceversa). El host es un elemento vacío en <body>;
+   los highlights sobre la página siguen fuera (page.css). */
+function mountShadowHost() {
+  state.hostEl = document.createElement('div');
+  state.hostEl.id = 'pf-inspector-host';
+  // Bloquear estilos heredables y reglas de la página sobre el host
+  state.hostEl.style.all = 'initial';
+  state.shadowRoot = state.hostEl.attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = panelCss;
+  state.shadowRoot.appendChild(style);
+  document.body.appendChild(state.hostEl);
+  return state.shadowRoot;
+}
 
 function applyTheme() {
   if (!state.panelEl) return;
@@ -76,6 +93,8 @@ export function createPanel() {
     return;
   }
 
+  const shadowRoot = mountShadowHost();
+
   state.panelEl = document.createElement('div');
   state.panelEl.id = 'pf-inspector-panel';
   state.panelEl.innerHTML = `
@@ -107,7 +126,7 @@ export function createPanel() {
   toastStack.id = 'pfi-toast-stack';
   state.panelEl.appendChild(toastStack);
 
-  document.body.appendChild(state.panelEl);
+  shadowRoot.appendChild(state.panelEl);
 
   state.panelEl.querySelector('#pfi-btn-close').addEventListener('click', closePanel);
   state.panelEl.querySelector('#pfi-btn-refresh').addEventListener('click', requestWidgets);
@@ -142,7 +161,8 @@ export function closePanel() {
 
 export function destroyPanel() {
   if (state.selectionMode) deactivateSelectionMode();
-  if (state.panelEl) { state.panelEl.remove(); state.panelEl = null; }
+  if (state.hostEl) { state.hostEl.remove(); state.hostEl = null; state.shadowRoot = null; }
+  state.panelEl = null;
 }
 
 function togglePfDependentUi() {

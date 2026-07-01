@@ -1,4 +1,45 @@
+"use strict";
 (() => {
+  // src/shared/messages.ts
+  var MSG = {
+    /** content → page: recolectar widgets */
+    COLLECT: "PF_INSPECTOR_COLLECT",
+    /** page → content: datos de widgets + info de la página */
+    DATA: "PF_INSPECTOR_DATA",
+    /** page → content: interceptada una llamada PrimeFaces.ab() */
+    AJAX: "PF_INSPECTOR_AJAX",
+    /** page → content: ids actualizados en una respuesta Ajax */
+    UPDATE: "PF_INSPECTOR_UPDATE",
+    /** content → page: ejecutar un método del Client API */
+    EXEC_API: "PF_INSPECTOR_EXEC_API",
+    /** content → page: disparar un evento inline (atributo on*) */
+    EXEC_EVENT: "PF_INSPECTOR_EXEC_EVENT",
+    /** page → content: resultado de EXEC_API / EXEC_EVENT */
+    EXEC_RESULT: "PF_INSPECTOR_EXEC_RESULT",
+    /** content → page: instalar los hooks de Ajax sin recolectar */
+    HOOK_AJAX: "PF_INSPECTOR_HOOK_AJAX",
+    /** page → content: el page script está cargado */
+    READY: "PF_INSPECTOR_READY"
+  };
+  function dataMessage(data, info) {
+    return { type: MSG.DATA, data, info };
+  }
+  function ajaxMessage(data) {
+    return { type: MSG.AJAX, data };
+  }
+  function updateMessage(updatedIds) {
+    return { type: MSG.UPDATE, data: updatedIds };
+  }
+  function execResultMessage(data) {
+    return { type: MSG.EXEC_RESULT, data };
+  }
+  function readyMessage() {
+    return { type: MSG.READY };
+  }
+  function postInspectorMessage(msg) {
+    window.postMessage(msg, "*");
+  }
+
   // inject/pageScript.js
   (function() {
     "use strict";
@@ -540,7 +581,7 @@
             process: cfg.p || cfg.process || null,
             update: cfg.u || cfg.update || null
           };
-          window.postMessage({ type: "PF_INSPECTOR_AJAX", data: info }, "*");
+          postInspectorMessage(ajaxMessage(info));
         } catch (e) {
         }
         return originalAb.apply(this, arguments);
@@ -559,7 +600,7 @@
                   if (uid) updatedIds.push(uid);
                 }
                 if (updatedIds.length > 0) {
-                  window.postMessage({ type: "PF_INSPECTOR_UPDATE", data: updatedIds }, "*");
+                  postInspectorMessage(updateMessage(updatedIds));
                 }
               }
             } catch (e) {
@@ -571,16 +612,16 @@
     }
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
-      if (event.data && event.data.type === "PF_INSPECTOR_COLLECT") {
+      if (event.data && event.data.type === MSG.COLLECT) {
         hookAjax();
         const widgets = collectWidgets({ showJqueryEvents: !!event.data.showJqueryEvents });
         const info = getPageInfo();
-        window.postMessage({ type: "PF_INSPECTOR_DATA", data: widgets, info }, "*");
+        postInspectorMessage(dataMessage(widgets, info));
       }
-      if (event.data && event.data.type === "PF_INSPECTOR_HOOK_AJAX") {
+      if (event.data && event.data.type === MSG.HOOK_AJAX) {
         hookAjax();
       }
-      if (event.data && event.data.type === "PF_INSPECTOR_EXEC_API") {
+      if (event.data && event.data.type === MSG.EXEC_API) {
         const { widgetVar, method, args, callId } = event.data;
         try {
           if (typeof PrimeFaces !== "undefined" && PrimeFaces.widgets && PrimeFaces.widgets[widgetVar]) {
@@ -589,41 +630,38 @@
               const callArgs = Array.isArray(args) ? args : [];
               const ret = widget[method].apply(widget, callArgs);
               const ser = serializeResult(ret);
-              window.postMessage({
-                type: "PF_INSPECTOR_EXEC_RESULT",
-                data: {
-                  success: true,
-                  widgetVar,
-                  method,
-                  hasResult: ser.hasResult,
-                  result: ser.result,
-                  callId: callId || null,
-                  argsCount: callArgs.length
-                }
-              }, "*");
+              postInspectorMessage(execResultMessage({
+                success: true,
+                widgetVar,
+                method,
+                hasResult: ser.hasResult,
+                result: ser.result,
+                callId: callId || null,
+                argsCount: callArgs.length
+              }));
             } else {
-              window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: false, widgetVar, method, error: "Method not found", callId: callId || null } }, "*");
+              postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: "Method not found", callId: callId || null }));
             }
           } else {
-            window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: false, widgetVar, method, error: "Widget not found", callId: callId || null } }, "*");
+            postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: "Widget not found", callId: callId || null }));
           }
         } catch (e) {
-          window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: false, widgetVar, method, error: e.message, callId: callId || null } }, "*");
+          postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: e.message, callId: callId || null }));
         }
       }
-      if (event.data && event.data.type === "PF_INSPECTOR_EXEC_EVENT") {
+      if (event.data && event.data.type === MSG.EXEC_EVENT) {
         const { ownerId, eventAttr, widgetVar } = event.data;
         try {
           const el = ownerId ? document.getElementById(ownerId) : null;
           if (!el) {
-            window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: "Element not found: " + ownerId } }, "*");
+            postInspectorMessage(execResultMessage({ success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: "Element not found: " + ownerId }));
             return;
           }
           const evName = (eventAttr || "").replace(/^on/i, "");
           const fn = el[eventAttr];
           if (typeof fn === "function") {
             fn.call(el, new Event(evName, { bubbles: true, cancelable: true }));
-            window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + "()" } }, "*");
+            postInspectorMessage(execResultMessage({ success: true, widgetVar: widgetVar || ownerId, method: eventAttr + "()" }));
             return;
           }
           let ev;
@@ -639,15 +677,15 @@
             ev = new Event(evName, { bubbles: true, cancelable: true });
           }
           el.dispatchEvent(ev);
-          window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + " dispatched" } }, "*");
+          postInspectorMessage(execResultMessage({ success: true, widgetVar: widgetVar || ownerId, method: eventAttr + " dispatched" }));
         } catch (e) {
-          window.postMessage({ type: "PF_INSPECTOR_EXEC_RESULT", data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: e.message } }, "*");
+          postInspectorMessage(execResultMessage({ success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: e.message }));
         }
       }
     });
     if (typeof PrimeFaces !== "undefined") {
       hookAjax();
     }
-    window.postMessage({ type: "PF_INSPECTOR_READY" }, "*");
+    postInspectorMessage(readyMessage());
   })();
 })();

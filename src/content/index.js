@@ -6,6 +6,7 @@ import { createPanel, closePanel, refreshPanel } from './ui/panel.js';
 import { showToast } from './ui/toast.js';
 import { t } from './core/i18n.js';
 import { toggleSelectionMode } from './ui/selection.js';
+import { MSG } from '../shared/messages.js';
 
 if (!window.__pfInspectorLoaded) {
   window.__pfInspectorLoaded = true;
@@ -23,14 +24,14 @@ if (!window.__pfInspectorLoaded) {
   window.addEventListener('message', (event) => {
     if (event.source !== window || !event.data || !event.data.type) return;
     switch (event.data.type) {
-      case 'PF_INSPECTOR_DATA':
+      case MSG.DATA:
         state.widgetsData = event.data.data || [];
         if (event.data.info) Object.assign(state.pageInfo, event.data.info);
         refreshPanel();
         break;
-      case 'PF_INSPECTOR_AJAX':         handleAjaxProcess(event.data.data); break;
-      case 'PF_INSPECTOR_UPDATE':       handleAjaxUpdate(event.data.data);  break;
-      case 'PF_INSPECTOR_EXEC_RESULT':  handleExecResult(event.data.data);  break;
+      case MSG.AJAX:        handleAjaxProcess(event.data.data); break;
+      case MSG.UPDATE:      handleAjaxUpdate(event.data.data);  break;
+      case MSG.EXEC_RESULT: handleExecResult(event.data.data);  break;
     }
   });
 

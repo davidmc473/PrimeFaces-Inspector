@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome"],
+
+    // Migración progresiva: los .js conviven con los .ts sin comprobarse.
+    // Al convertir un fichero a .ts entra automáticamente en modo estricto.
+    "allowJs": true,
+    "checkJs": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "inject", "esbuild.config.mjs"]
+}

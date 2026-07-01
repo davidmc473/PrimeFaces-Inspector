@@ -14,10 +14,12 @@ const jsBase = {
 };
 
 const buildTargets = [
-  { ...jsBase, entryPoints: ['src/content/index.js'],         outfile: 'dist/content.js' },
+  // El CSS del panel se importa como texto y se inyecta dentro del ShadowRoot.
+  { ...jsBase, entryPoints: ['src/content/index.js'],         outfile: 'dist/content.js', loader: { '.css': 'text' } },
   { ...jsBase, entryPoints: ['src/background/background.js'], outfile: 'dist/background.js' },
   { ...jsBase, entryPoints: ['inject/pageScript.js'],         outfile: 'dist/inject/pageScript.js' },
-  {             entryPoints: ['src/styles/content.css'],       outfile: 'dist/content.css', bundle: true },
+  // Solo los estilos que se aplican a elementos de la página (highlights).
+  {             entryPoints: ['src/styles/page.css'],          outfile: 'dist/content.css', bundle: true },
 ];
 
 if (isWatch) {

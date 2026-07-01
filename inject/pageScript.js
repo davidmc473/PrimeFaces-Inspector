@@ -1,7 +1,18 @@
 /**
  * Script inyectado directamente en la página para acceder a PrimeFaces global.
- * Se comunica con el content script vía window.postMessage.
+ * Se comunica con el content script vía window.postMessage usando el
+ * contrato definido en src/shared/messages.ts.
  */
+import {
+  MSG,
+  dataMessage,
+  ajaxMessage,
+  updateMessage,
+  execResultMessage,
+  readyMessage,
+  postInspectorMessage,
+} from '../src/shared/messages.js';
+
 (function () {
   'use strict';
 
@@ -597,7 +608,7 @@
           process: cfg.p || cfg.process || null,
           update: cfg.u || cfg.update || null
         };
-        window.postMessage({ type: 'PF_INSPECTOR_AJAX', data: info }, '*');
+        postInspectorMessage(ajaxMessage(info));
       } catch (e) { /* silenciar */ }
       return originalAb.apply(this, arguments);
     };
@@ -616,7 +627,7 @@
                 if (uid) updatedIds.push(uid);
               }
               if (updatedIds.length > 0) {
-                window.postMessage({ type: 'PF_INSPECTOR_UPDATE', data: updatedIds }, '*');
+                postInspectorMessage(updateMessage(updatedIds));
               }
             }
           } catch (e) { /* silenciar */ }
@@ -631,18 +642,18 @@
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
 
-    if (event.data && event.data.type === 'PF_INSPECTOR_COLLECT') {
+    if (event.data && event.data.type === MSG.COLLECT) {
       hookAjax();
       const widgets = collectWidgets({ showJqueryEvents: !!event.data.showJqueryEvents });
       const info = getPageInfo();
-      window.postMessage({ type: 'PF_INSPECTOR_DATA', data: widgets, info: info }, '*');
+      postInspectorMessage(dataMessage(widgets, info));
     }
 
-    if (event.data && event.data.type === 'PF_INSPECTOR_HOOK_AJAX') {
+    if (event.data && event.data.type === MSG.HOOK_AJAX) {
       hookAjax();
     }
 
-    if (event.data && event.data.type === 'PF_INSPECTOR_EXEC_API') {
+    if (event.data && event.data.type === MSG.EXEC_API) {
       const { widgetVar, method, args, callId } = event.data;
       try {
         if (typeof PrimeFaces !== 'undefined' && PrimeFaces.widgets && PrimeFaces.widgets[widgetVar]) {
@@ -651,37 +662,34 @@
             const callArgs = Array.isArray(args) ? args : [];
             const ret = widget[method].apply(widget, callArgs);
             const ser = serializeResult(ret);
-            window.postMessage({
-              type: 'PF_INSPECTOR_EXEC_RESULT',
-              data: {
-                success: true,
-                widgetVar, method,
-                hasResult: ser.hasResult,
-                result: ser.result,
-                callId: callId || null,
-                argsCount: callArgs.length
-              }
-            }, '*');
+            postInspectorMessage(execResultMessage({
+              success: true,
+              widgetVar, method,
+              hasResult: ser.hasResult,
+              result: ser.result,
+              callId: callId || null,
+              argsCount: callArgs.length
+            }));
           } else {
-            window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Method not found', callId: callId || null } }, '*');
+            postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: 'Method not found', callId: callId || null }));
           }
         } else {
-          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: 'Widget not found', callId: callId || null } }, '*');
+          postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: 'Widget not found', callId: callId || null }));
         }
       } catch (e) {
-        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar, method, error: e.message, callId: callId || null } }, '*');
+        postInspectorMessage(execResultMessage({ success: false, widgetVar, method, error: e.message, callId: callId || null }));
       }
     }
 
 
 
     // Ejecutar un evento inline (atributo on*) sobre el elemento que lo tiene
-    if (event.data && event.data.type === 'PF_INSPECTOR_EXEC_EVENT') {
+    if (event.data && event.data.type === MSG.EXEC_EVENT) {
       const { ownerId, eventAttr, widgetVar } = event.data;
       try {
         const el = ownerId ? document.getElementById(ownerId) : null;
         if (!el) {
-          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: 'Element not found: ' + ownerId } }, '*');
+          postInspectorMessage(execResultMessage({ success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: 'Element not found: ' + ownerId }));
           return;
         }
         const evName = (eventAttr || '').replace(/^on/i, '');
@@ -689,7 +697,7 @@
         const fn = el[eventAttr];
         if (typeof fn === 'function') {
           fn.call(el, new Event(evName, { bubbles: true, cancelable: true }));
-          window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + '()' } }, '*');
+          postInspectorMessage(execResultMessage({ success: true, widgetVar: widgetVar || ownerId, method: eventAttr + '()' }));
           return;
         }
         // 2) Fallback: despachar el evento estándar para que cualquier listener responda
@@ -707,9 +715,9 @@
           ev = new Event(evName, { bubbles: true, cancelable: true });
         }
         el.dispatchEvent(ev);
-        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: true, widgetVar: widgetVar || ownerId, method: eventAttr + ' dispatched' } }, '*');
+        postInspectorMessage(execResultMessage({ success: true, widgetVar: widgetVar || ownerId, method: eventAttr + ' dispatched' }));
       } catch (e) {
-        window.postMessage({ type: 'PF_INSPECTOR_EXEC_RESULT', data: { success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: e.message } }, '*');
+        postInspectorMessage(execResultMessage({ success: false, widgetVar: widgetVar || ownerId, method: eventAttr, error: e.message }));
       }
     }
   });
@@ -718,5 +726,5 @@
     hookAjax();
   }
 
-  window.postMessage({ type: 'PF_INSPECTOR_READY' }, '*');
+  postInspectorMessage(readyMessage());
 })();

@@ -49,9 +49,12 @@ export function wireSearchEvents(panelEl, callbacks) {
     if (!filterDropdown.hidden) renderFilterDropdown(callbacks);
   });
 
+  // Con el panel en Shadow DOM, e.target llega retargetizado al host desde
+  // fuera del shadow; composedPath() da la ruta real también dentro de él.
   document.addEventListener('click', (e) => {
     if (!panelEl) return;
-    if (!filterDropdown.hidden && !filterDropdown.contains(e.target) && e.target !== filterBtn) {
+    const path = e.composedPath();
+    if (!filterDropdown.hidden && !path.includes(filterDropdown) && !path.includes(filterBtn)) {
       filterDropdown.hidden = true;
     }
   });

@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.idea/
+.vscode/
+*.swp
+
+# Empaquetados de la extensión
+*.zip
+*.crx
+*.pem
+
+# NOTA: dist/ se versiona a propósito (el manifest apunta a dist/).
+# Ver docs/MEJORAS.md §2.5 para la propuesta de sacarlo de git.

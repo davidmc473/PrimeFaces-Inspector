@@ -1,0 +1,35 @@
+/* ═══════════════════════════════════════════════════════════════
+   PrimeFaces Inspector — Estilos inyectados en la PÁGINA
+   Solo lo que se pinta sobre elementos de la página (highlights y
+   modo selección). Debe vivir fuera del Shadow DOM del panel, y usa
+   !important para imponerse al CSS propio de la página.
+   Los keyframes de .pfi-highlight-update / .pfi-highlight-process se
+   generan dinámicamente en core/config.js (applyDynamicColors).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Highlights de elementos en la página ── */
+.pfi-highlight-hover {
+  outline: 2px solid #58a6ff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgba(88,166,255,.3) !important;
+}
+.pfi-highlight-target {
+  outline: 2px dashed #f97316 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 12px rgba(249,115,22,.3) !important;
+}
+
+/* ── Modo selección ── */
+.pfi-selection-candidate {
+  outline: 2px dashed rgba(88,166,255,.5) !important;
+  outline-offset: 1px !important;
+}
+/* Capa transparente que captura hover/click por coordenadas. Permite
+   seleccionar incluso widgets deshabilitados, que no emiten eventos. */
+.pfi-selection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: transparent;
+  cursor: crosshair;
+}
