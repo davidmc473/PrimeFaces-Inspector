@@ -110,4 +110,12 @@ export default {
   monResponse: 'Response',
 
   ctxNoWidget: 'No PrimeFaces widget under the cursor.',
+
+  dtConnecting: 'Connecting to the page…',
+  dtCannotInspect: 'This page cannot be inspected.',
+  dtBtnFloating: 'Open/close the floating panel on the page',
+  dtHighlight: 'Highlight on the page',
+  dtOpenDetail: 'Open the detail in the in-page panel',
+  dtNoMethods: 'No callable methods.',
+  dtMetaEmpty: 'No metadata.',
 };

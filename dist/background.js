@@ -11,6 +11,43 @@
       await chrome.tabs.sendMessage(tabId, message);
     }
   }
+  var devtoolsPorts = /* @__PURE__ */ new Map();
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== "pfi-devtools") return;
+    let tabId = null;
+    port.onMessage.addListener(async (msg) => {
+      if (!msg) return;
+      if (msg.type === "init" && typeof msg.tabId === "number") {
+        tabId = msg.tabId;
+        devtoolsPorts.set(tabId, port);
+        return;
+      }
+      if (msg.type === "toTab" && tabId != null && msg.message) {
+        try {
+          await sendToTab(tabId, msg.message);
+        } catch (e) {
+          try {
+            port.postMessage({ type: "pfiError" });
+          } catch (_) {
+          }
+        }
+      }
+    });
+    port.onDisconnect.addListener(() => {
+      if (tabId != null && devtoolsPorts.get(tabId) === port) devtoolsPorts.delete(tabId);
+    });
+  });
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (msg && msg.pfiDevtools && sender.tab && sender.tab.id != null) {
+      const port = devtoolsPorts.get(sender.tab.id);
+      if (port) {
+        try {
+          port.postMessage(msg);
+        } catch (_) {
+        }
+      }
+    }
+  });
   var CTX_MENU_ID = "pfi-inspect-widget";
   chrome.runtime.onInstalled.addListener(() => {
     const lang = (chrome.i18n?.getUILanguage() || "en").toLowerCase();

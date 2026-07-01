@@ -1,7 +1,7 @@
 import { loadConfig, config, applyDynamicColors } from './core/config.js';
 import { state } from './core/state.js';
 import { handleAjaxProcess, handleAjaxUpdate, flashElement } from './core/highlights.js';
-import { requestWidgets } from './core/messaging.js';
+import { requestWidgets, injectPageScript } from './core/messaging.js';
 import { createPanel, closePanel, refreshPanel, openWidgetDetail } from './ui/panel.js';
 import { showToast } from './ui/toast.js';
 import { t } from './core/i18n.js';
@@ -29,12 +29,16 @@ if (!window.__pfInspectorLoaded) {
         state.widgetsData = event.data.data || [];
         if (event.data.info) Object.assign(state.pageInfo, event.data.info);
         refreshPanel();
+        notifyDevtools({ pfiDevtools: true, kind: 'data', data: state.widgetsData, info: state.pageInfo });
         break;
       case MSG.AJAX:        handleAjaxProcess(event.data.data); break;
       case MSG.UPDATE:      handleAjaxUpdate(event.data.data);  break;
       case MSG.EXEC_RESULT: handleExecResult(event.data.data);  break;
       case MSG.AJAX_START:  onAjaxStart(event.data.data);       break;
-      case MSG.AJAX_DONE:   onAjaxDone(event.data.data);        break;
+      case MSG.AJAX_DONE:
+        onAjaxDone(event.data.data);
+        notifyDevtools({ pfiDevtools: true, kind: 'ajax' });
+        break;
       case MSG.EVENT_FIRED: onEventFired(event.data.data);      break;
     }
   });
@@ -67,6 +71,14 @@ if (!window.__pfInspectorLoaded) {
     }
   }
 
+  /* Reenvía datos al panel de DevTools vía background (relay). Si las
+     DevTools no están abiertas el background lo descarta sin más. */
+  function notifyDevtools(msg) {
+    try {
+      chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError);
+    } catch (e) { /* contexto de la extensión invalidado (recarga) */ }
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'togglePanel') {
       if (state.panelEl && state.panelEl.style.display !== 'none') closePanel();
@@ -75,6 +87,31 @@ if (!window.__pfInspectorLoaded) {
     }
     if (msg && msg.action === 'inspectContextTarget') {
       inspectContextTarget();
+      sendResponse({ ok: true });
+    }
+    if (msg && msg.action === 'pfiDevtoolsCollect') {
+      // Recolectar para el panel de DevTools sin abrir el panel flotante
+      injectPageScript();
+      setTimeout(requestWidgets, 300);
+      sendResponse({ ok: true });
+    }
+    if (msg && msg.action === 'pfiDevtoolsHighlight') {
+      const el = msg.id ? document.getElementById(msg.id) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        flashElement(el, 'pfi-highlight-hover', 1500);
+      }
+      sendResponse({ ok: !!el });
+    }
+    if (msg && msg.action === 'pfiDevtoolsOpenDetail') {
+      createPanel();
+      const widgetVar = msg.widgetVar;
+      let tries = 12;
+      const attempt = () => {
+        if (state.widgetsData.some(w => w.widgetVar === widgetVar)) openWidgetDetail(widgetVar);
+        else if (--tries > 0) setTimeout(attempt, 200);
+      };
+      attempt();
       sendResponse({ ok: true });
     }
     return true;

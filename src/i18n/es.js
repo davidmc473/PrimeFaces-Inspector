@@ -110,4 +110,12 @@ export default {
   monResponse: 'Respuesta',
 
   ctxNoWidget: 'Ningún widget PrimeFaces bajo el cursor.',
+
+  dtConnecting: 'Conectando con la página…',
+  dtCannotInspect: 'No se puede inspeccionar esta página.',
+  dtBtnFloating: 'Abrir/cerrar el panel flotante en la página',
+  dtHighlight: 'Resaltar en la página',
+  dtOpenDetail: 'Abrir el detalle en el panel de la página',
+  dtNoMethods: 'Sin métodos ejecutables.',
+  dtMetaEmpty: 'Sin metadatos.',
 };

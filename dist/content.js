@@ -350,7 +350,14 @@
     monUpdatesApplied: "Applied updates",
     monRequest: "Request payload",
     monResponse: "Response",
-    ctxNoWidget: "No PrimeFaces widget under the cursor."
+    ctxNoWidget: "No PrimeFaces widget under the cursor.",
+    dtConnecting: "Connecting to the page\u2026",
+    dtCannotInspect: "This page cannot be inspected.",
+    dtBtnFloating: "Open/close the floating panel on the page",
+    dtHighlight: "Highlight on the page",
+    dtOpenDetail: "Open the detail in the in-page panel",
+    dtNoMethods: "No callable methods.",
+    dtMetaEmpty: "No metadata."
   };
 
   // src/i18n/es.js
@@ -455,7 +462,14 @@
     monUpdatesApplied: "Updates aplicados",
     monRequest: "Payload de la petici\xF3n",
     monResponse: "Respuesta",
-    ctxNoWidget: "Ning\xFAn widget PrimeFaces bajo el cursor."
+    ctxNoWidget: "Ning\xFAn widget PrimeFaces bajo el cursor.",
+    dtConnecting: "Conectando con la p\xE1gina\u2026",
+    dtCannotInspect: "No se puede inspeccionar esta p\xE1gina.",
+    dtBtnFloating: "Abrir/cerrar el panel flotante en la p\xE1gina",
+    dtHighlight: "Resaltar en la p\xE1gina",
+    dtOpenDetail: "Abrir el detalle en el panel de la p\xE1gina",
+    dtNoMethods: "Sin m\xE9todos ejecutables.",
+    dtMetaEmpty: "Sin metadatos."
   };
 
   // src/content/core/i18n.js
@@ -2043,6 +2057,11 @@
       } else {
         showToast({ success: false, text: t("execErr", data.error) });
       }
+    }, notifyDevtools = function(msg) {
+      try {
+        chrome.runtime.sendMessage(msg, () => void chrome.runtime.lastError);
+      } catch (e) {
+      }
     }, inspectContextTarget = function() {
       const target = lastContextTarget;
       const hadData = state.widgetsData.length > 0;
@@ -2070,7 +2089,7 @@
     }, onGlobalKeyUp = function(e) {
       if (!e.ctrlKey || !e.shiftKey) state.ctrlShiftFired = false;
     };
-    handleExecResult2 = handleExecResult, inspectContextTarget2 = inspectContextTarget, onGlobalKeyDown2 = onGlobalKeyDown, onGlobalKeyUp2 = onGlobalKeyUp;
+    handleExecResult2 = handleExecResult, notifyDevtools2 = notifyDevtools, inspectContextTarget2 = inspectContextTarget, onGlobalKeyDown2 = onGlobalKeyDown, onGlobalKeyUp2 = onGlobalKeyUp;
     window.__pfInspectorLoaded = true;
     loadConfig(() => {
       applyDynamicColors();
@@ -2088,6 +2107,7 @@
           state.widgetsData = event.data.data || [];
           if (event.data.info) Object.assign(state.pageInfo, event.data.info);
           refreshPanel();
+          notifyDevtools({ pfiDevtools: true, kind: "data", data: state.widgetsData, info: state.pageInfo });
           break;
         case MSG.AJAX:
           handleAjaxProcess(event.data.data);
@@ -2103,6 +2123,7 @@
           break;
         case MSG.AJAX_DONE:
           onAjaxDone(event.data.data);
+          notifyDevtools({ pfiDevtools: true, kind: "ajax" });
           break;
         case MSG.EVENT_FIRED:
           onEventFired(event.data.data);
@@ -2117,6 +2138,30 @@
       }
       if (msg && msg.action === "inspectContextTarget") {
         inspectContextTarget();
+        sendResponse({ ok: true });
+      }
+      if (msg && msg.action === "pfiDevtoolsCollect") {
+        injectPageScript();
+        setTimeout(requestWidgets, 300);
+        sendResponse({ ok: true });
+      }
+      if (msg && msg.action === "pfiDevtoolsHighlight") {
+        const el = msg.id ? document.getElementById(msg.id) : null;
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          flashElement(el, "pfi-highlight-hover", 1500);
+        }
+        sendResponse({ ok: !!el });
+      }
+      if (msg && msg.action === "pfiDevtoolsOpenDetail") {
+        createPanel();
+        const widgetVar = msg.widgetVar;
+        let tries = 12;
+        const attempt = () => {
+          if (state.widgetsData.some((w) => w.widgetVar === widgetVar)) openWidgetDetail(widgetVar);
+          else if (--tries > 0) setTimeout(attempt, 200);
+        };
+        attempt();
         sendResponse({ ok: true });
       }
       return true;
@@ -2142,6 +2187,7 @@
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
   var handleExecResult2;
+  var notifyDevtools2;
   var inspectContextTarget2;
   var onGlobalKeyDown2;
   var onGlobalKeyUp2;

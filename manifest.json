@@ -28,6 +28,7 @@
   "background": {
     "service_worker": "dist/background.js"
   },
+  "devtools_page": "devtools/devtools.html",
   "web_accessible_resources": [
     {
       "resources": ["dist/inject/pageScript.js"],
