@@ -2,9 +2,9 @@ import { state } from '../core/state.js';
 import { config, saveConfig, applyDynamicColors } from '../core/config.js';
 import { t } from '../core/i18n.js';
 import { clearHighlight, clearTargetHighlight, clearEventRowHighlights } from '../core/highlights.js';
-import { requestWidgets, executeWidgetAction, executeInlineEvent, injectPageScript } from '../core/messaging.js';
+import { requestWidgets, executeWidgetAction, executeInlineEvent, injectPageScript, stopEventMonitor } from '../core/messaging.js';
 import { icon } from './icons.js';
-import { escHtml, escAttr } from './utils.js';
+import { escHtml, escAttr, cssEsc } from './utils.js';
 import { renderHeaderInfo } from './infobar.js';
 import { buildSearchBar, wireSearchEvents } from './search.js';
 import { applyFilters, renderList } from './widget-list.js';
@@ -12,6 +12,7 @@ import { expandCard } from './widget-card.js';
 import { showConfig } from './config-panel.js';
 import { showToast, showResultModal } from './toast.js';
 import { toggleSelectionMode, deactivateSelectionMode } from './selection.js';
+import { toggleMonitor } from './monitor.js';
 import { initTooltips } from './tooltip.js';
 import panelCss from '../../styles/panel.css';
 
@@ -106,6 +107,7 @@ export function createPanel() {
       <span class="pfi-title">${escHtml(t('title'))}</span>
       <span class="pfi-count" id="pfi-count"></span>
       <button class="pfi-header-btn" id="pfi-btn-select"  title="${escAttr(t('btnSelect'))}">${icon('crosshair', 14)}</button>
+      <button class="pfi-header-btn" id="pfi-btn-monitor" title="${escAttr(t('btnMonitor'))}">${icon('activity', 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-config"  title="${escAttr(t('btnConfig'))}">${icon('settings', 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-refresh" title="${escAttr(t('btnRefresh'))}">${icon('rotate-ccw', 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-close"   title="${escAttr(t('btnClose'))}">${icon('x', 14)}</button>
@@ -134,6 +136,7 @@ export function createPanel() {
   state.panelEl.querySelector('#pfi-btn-select').addEventListener('click', () => {
     toggleSelectionMode({ expandCard: buildCallbacks().expandCard });
   });
+  state.panelEl.querySelector('#pfi-btn-monitor').addEventListener('click', toggleMonitor);
 
   wireSearchEvents(state.panelEl, buildCallbacks());
   makeDraggable(state.panelEl, state.panelEl.querySelector('.pfi-drag-handle'));
@@ -149,6 +152,7 @@ export function createPanel() {
 
 export function closePanel() {
   if (state.selectionMode) deactivateSelectionMode();
+  if (state.eventMonitorOn) { stopEventMonitor(); state.eventMonitorOn = false; }
   if (state.panelEl) {
     state.panelEl.style.display = 'none';
     clearHighlight();
@@ -180,4 +184,20 @@ export function refreshPanel() {
   renderList(buildCallbacks());
   renderHeaderInfo();
   togglePfDependentUi();
+}
+
+/** Abre (si hace falta) el detalle de un widget, limpiando los filtros
+    si estos lo dejaban fuera de la lista. Usado por el menú contextual. */
+export function openWidgetDetail(widgetVar) {
+  if (!state.panelEl) return;
+  const card = state.panelEl.querySelector(`.pfi-card[data-widget-var="${cssEsc(widgetVar)}"]`);
+  if (!card) {
+    state.searchTerm = '';
+    const input = state.panelEl.querySelector('#pfi-search');
+    if (input) input.value = '';
+    state.selectedTypes.clear();
+    applyFilters();
+    renderList(buildCallbacks());
+  }
+  buildCallbacks().expandCard(widgetVar, true);
 }

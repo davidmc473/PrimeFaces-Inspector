@@ -6,7 +6,7 @@ let selectionCallbacks = {};
 let overlayEl = null;
 let lastWidgetVar = null;
 
-function findWidgetForElement(el) {
+export function findWidgetForElement(el) {
   let current = el;
   while (current && current !== document.body) {
     if (current.id) {

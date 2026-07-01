@@ -2,10 +2,11 @@ import { loadConfig, config, applyDynamicColors } from './core/config.js';
 import { state } from './core/state.js';
 import { handleAjaxProcess, handleAjaxUpdate, flashElement } from './core/highlights.js';
 import { requestWidgets } from './core/messaging.js';
-import { createPanel, closePanel, refreshPanel } from './ui/panel.js';
+import { createPanel, closePanel, refreshPanel, openWidgetDetail } from './ui/panel.js';
 import { showToast } from './ui/toast.js';
 import { t } from './core/i18n.js';
-import { toggleSelectionMode } from './ui/selection.js';
+import { toggleSelectionMode, findWidgetForElement } from './ui/selection.js';
+import { onAjaxStart, onAjaxDone, onEventFired } from './ui/monitor.js';
 import { MSG } from '../shared/messages.js';
 
 if (!window.__pfInspectorLoaded) {
@@ -32,6 +33,9 @@ if (!window.__pfInspectorLoaded) {
       case MSG.AJAX:        handleAjaxProcess(event.data.data); break;
       case MSG.UPDATE:      handleAjaxUpdate(event.data.data);  break;
       case MSG.EXEC_RESULT: handleExecResult(event.data.data);  break;
+      case MSG.AJAX_START:  onAjaxStart(event.data.data);       break;
+      case MSG.AJAX_DONE:   onAjaxDone(event.data.data);        break;
+      case MSG.EVENT_FIRED: onEventFired(event.data.data);      break;
     }
   });
 
@@ -69,8 +73,39 @@ if (!window.__pfInspectorLoaded) {
       else createPanel();
       sendResponse({ ok: true });
     }
+    if (msg && msg.action === 'inspectContextTarget') {
+      inspectContextTarget();
+      sendResponse({ ok: true });
+    }
     return true;
   });
+
+  /* ── "Inspeccionar widget PrimeFaces" desde el menú contextual ──
+     El evento contextMenus.onClicked no trae coordenadas, así que se
+     recuerda el último elemento sobre el que se abrió el menú. */
+  let lastContextTarget = null;
+  document.addEventListener('contextmenu', (e) => {
+    lastContextTarget = (e.composedPath && e.composedPath()[0]) || e.target;
+  }, true);
+
+  function inspectContextTarget() {
+    const target = lastContextTarget;
+    const hadData = state.widgetsData.length > 0;
+    createPanel();
+    let tries = 12;
+    const attempt = () => {
+      const widget = (target && target.nodeType === Node.ELEMENT_NODE) ? findWidgetForElement(target) : null;
+      if (widget) {
+        openWidgetDetail(widget.widgetVar);
+      } else if (--tries > 0 && !hadData && state.widgetsData.length === 0) {
+        // El panel acaba de abrirse: esperar a que lleguen los widgets
+        setTimeout(attempt, 200);
+      } else {
+        showToast({ success: false, text: t('ctxNoWidget') });
+      }
+    };
+    attempt();
+  }
 
   const observer = new MutationObserver((mutations) => {
     if (!config.highlightUpdates) return;

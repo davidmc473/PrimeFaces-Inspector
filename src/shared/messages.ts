@@ -7,7 +7,15 @@
  * factory functions; nunca strings sueltos.
  */
 
-import type { AjaxInfo, ExecResult, PageInfo, Widget } from './types.js';
+import type {
+  AjaxInfo,
+  AjaxRequestDone,
+  AjaxRequestStart,
+  ExecResult,
+  FiredEvent,
+  PageInfo,
+  Widget,
+} from './types.js';
 
 export const MSG = {
   /** content → page: recolectar widgets */
@@ -28,6 +36,16 @@ export const MSG = {
   HOOK_AJAX: 'PF_INSPECTOR_HOOK_AJAX',
   /** page → content: el page script está cargado */
   READY: 'PF_INSPECTOR_READY',
+  /** page → content: enviada una petición Ajax JSF (timeline) */
+  AJAX_START: 'PF_INSPECTOR_AJAX_START',
+  /** page → content: finalizada una petición Ajax JSF (timeline) */
+  AJAX_DONE: 'PF_INSPECTOR_AJAX_DONE',
+  /** content → page: empezar a capturar disparos de eventos en vivo */
+  EVENT_MONITOR_START: 'PF_INSPECTOR_EVENT_MONITOR_START',
+  /** content → page: dejar de capturar disparos de eventos */
+  EVENT_MONITOR_STOP: 'PF_INSPECTOR_EVENT_MONITOR_STOP',
+  /** page → content: un evento monitorizado se ha disparado */
+  EVENT_FIRED: 'PF_INSPECTOR_EVENT_FIRED',
 } as const;
 
 export type MessageType = (typeof MSG)[keyof typeof MSG];
@@ -81,6 +99,29 @@ export interface ReadyMessage {
   type: typeof MSG.READY;
 }
 
+export interface AjaxStartMessage {
+  type: typeof MSG.AJAX_START;
+  data: AjaxRequestStart;
+}
+
+export interface AjaxDoneMessage {
+  type: typeof MSG.AJAX_DONE;
+  data: AjaxRequestDone;
+}
+
+export interface EventMonitorStartMessage {
+  type: typeof MSG.EVENT_MONITOR_START;
+}
+
+export interface EventMonitorStopMessage {
+  type: typeof MSG.EVENT_MONITOR_STOP;
+}
+
+export interface EventFiredMessage {
+  type: typeof MSG.EVENT_FIRED;
+  data: FiredEvent;
+}
+
 export type InspectorMessage =
   | CollectMessage
   | DataMessage
@@ -90,7 +131,12 @@ export type InspectorMessage =
   | ExecEventMessage
   | ExecResultMessage
   | HookAjaxMessage
-  | ReadyMessage;
+  | ReadyMessage
+  | AjaxStartMessage
+  | AjaxDoneMessage
+  | EventMonitorStartMessage
+  | EventMonitorStopMessage
+  | EventFiredMessage;
 
 /* ── Factory functions ── */
 
@@ -133,6 +179,26 @@ export function execResultMessage(data: ExecResult): ExecResultMessage {
 
 export function readyMessage(): ReadyMessage {
   return { type: MSG.READY };
+}
+
+export function ajaxStartMessage(data: AjaxRequestStart): AjaxStartMessage {
+  return { type: MSG.AJAX_START, data };
+}
+
+export function ajaxDoneMessage(data: AjaxRequestDone): AjaxDoneMessage {
+  return { type: MSG.AJAX_DONE, data };
+}
+
+export function eventMonitorStartMessage(): EventMonitorStartMessage {
+  return { type: MSG.EVENT_MONITOR_START };
+}
+
+export function eventMonitorStopMessage(): EventMonitorStopMessage {
+  return { type: MSG.EVENT_MONITOR_STOP };
+}
+
+export function eventFiredMessage(data: FiredEvent): EventFiredMessage {
+  return { type: MSG.EVENT_FIRED, data };
 }
 
 /** Publica un mensaje del inspector en la ventana (misma página). */

@@ -19,7 +19,17 @@
     /** content → page: instalar los hooks de Ajax sin recolectar */
     HOOK_AJAX: "PF_INSPECTOR_HOOK_AJAX",
     /** page → content: el page script está cargado */
-    READY: "PF_INSPECTOR_READY"
+    READY: "PF_INSPECTOR_READY",
+    /** page → content: enviada una petición Ajax JSF (timeline) */
+    AJAX_START: "PF_INSPECTOR_AJAX_START",
+    /** page → content: finalizada una petición Ajax JSF (timeline) */
+    AJAX_DONE: "PF_INSPECTOR_AJAX_DONE",
+    /** content → page: empezar a capturar disparos de eventos en vivo */
+    EVENT_MONITOR_START: "PF_INSPECTOR_EVENT_MONITOR_START",
+    /** content → page: dejar de capturar disparos de eventos */
+    EVENT_MONITOR_STOP: "PF_INSPECTOR_EVENT_MONITOR_STOP",
+    /** page → content: un evento monitorizado se ha disparado */
+    EVENT_FIRED: "PF_INSPECTOR_EVENT_FIRED"
   };
   function dataMessage(data, info) {
     return { type: MSG.DATA, data, info };
@@ -35,6 +45,15 @@
   }
   function readyMessage() {
     return { type: MSG.READY };
+  }
+  function ajaxStartMessage(data) {
+    return { type: MSG.AJAX_START, data };
+  }
+  function ajaxDoneMessage(data) {
+    return { type: MSG.AJAX_DONE, data };
+  }
+  function eventFiredMessage(data) {
+    return { type: MSG.EVENT_FIRED, data };
   }
   function postInspectorMessage(msg) {
     window.postMessage(msg, "*");
@@ -610,6 +629,212 @@
         }
       }
     }
+    const MAX_REQ_BODY = 2e3;
+    const MAX_RES_BODY = 4e3;
+    let ajaxSeq = 0;
+    function parseFacesRequestBody(body) {
+      if (typeof body !== "string" || body.indexOf("faces.partial.ajax") === -1) return null;
+      try {
+        const sp = new URLSearchParams(body);
+        let ns = null;
+        if (sp.get("javax.faces.partial.ajax") === "true") ns = "javax";
+        else if (sp.get("jakarta.faces.partial.ajax") === "true") ns = "jakarta";
+        if (!ns) return null;
+        return {
+          source: sp.get(ns + ".faces.source"),
+          process: sp.get(ns + ".faces.partial.execute"),
+          update: sp.get(ns + ".faces.partial.render"),
+          event: sp.get(ns + ".faces.behavior.event")
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+    function parseFacesResponse(xhr) {
+      const out = { updates: [], errorName: null, errorMessage: null, redirect: null, responseBody: "" };
+      try {
+        const text = xhr.responseText || "";
+        out.responseBody = text.slice(0, MAX_RES_BODY);
+        let xml = null;
+        try {
+          xml = xhr.responseXML;
+        } catch (e) {
+        }
+        if (!xml && text.indexOf("<partial-response") !== -1) {
+          xml = new DOMParser().parseFromString(text, "text/xml");
+        }
+        if (!xml) return out;
+        const ups = xml.getElementsByTagName("update");
+        for (let i = 0; i < ups.length; i++) {
+          const uid = ups[i].getAttribute("id");
+          if (uid) out.updates.push(uid);
+        }
+        const err = xml.getElementsByTagName("error")[0];
+        if (err) {
+          const en = err.getElementsByTagName("error-name")[0];
+          const em = err.getElementsByTagName("error-message")[0];
+          out.errorName = en && en.textContent || "error";
+          out.errorMessage = em ? String(em.textContent || "").slice(0, 300) : null;
+        }
+        const red = xml.getElementsByTagName("redirect")[0];
+        if (red) out.redirect = red.getAttribute("url");
+      } catch (e) {
+      }
+      return out;
+    }
+    function hookXhrTimeline() {
+      if (window.__pfInspectorXhrHooked) return;
+      window.__pfInspectorXhrHooked = true;
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        try {
+          this.__pfiMethod = method;
+          this.__pfiUrl = String(url);
+        } catch (e) {
+        }
+        return origOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function(body) {
+        try {
+          const params = parseFacesRequestBody(body);
+          if (params) {
+            const id = "ax" + ++ajaxSeq + "_" + Date.now().toString(36);
+            const start = Date.now();
+            postInspectorMessage(ajaxStartMessage({
+              id,
+              url: this.__pfiUrl || "",
+              method: this.__pfiMethod || "POST",
+              source: params.source,
+              process: params.process,
+              update: params.update,
+              event: params.event,
+              requestBody: String(body).slice(0, MAX_REQ_BODY),
+              ts: start
+            }));
+            this.addEventListener("loadend", () => {
+              const res = parseFacesResponse(this);
+              const httpOk = this.status >= 200 && this.status < 300;
+              postInspectorMessage(ajaxDoneMessage({
+                id,
+                status: this.status,
+                ok: httpOk && !res.errorName,
+                durationMs: Date.now() - start,
+                updates: res.updates,
+                errorName: httpOk ? res.errorName : res.errorName || "HTTP " + this.status,
+                errorMessage: res.errorMessage,
+                redirect: res.redirect,
+                responseBody: res.responseBody
+              }));
+              if (eventMonitorOn) setTimeout(armEventMonitor, 250);
+            });
+          }
+        } catch (e) {
+        }
+        return origSend.apply(this, arguments);
+      };
+    }
+    let eventMonitorOn = false;
+    let monitorRegs = [];
+    const MONITOR_EXCLUDED = /* @__PURE__ */ new Set([
+      "mousemove",
+      "pointermove",
+      "mouseover",
+      "mouseout",
+      "pointerover",
+      "pointerout",
+      "mouseenter",
+      "mouseleave",
+      "scroll",
+      "wheel",
+      "touchmove",
+      "drag",
+      "dragover"
+    ]);
+    let monitorWindowStart = 0;
+    let monitorWindowCount = 0;
+    function domEventType(ev) {
+      if (ev.source === "inline") return ev.event.replace(/^on/i, "").toLowerCase();
+      const m = String(ev.event).match(/^([a-zA-Z]+)/);
+      return m ? m[1].toLowerCase() : null;
+    }
+    function summarizeDomEvent(e) {
+      const parts = [];
+      const target = e.target;
+      if (target) {
+        if (target.id) parts.push("#" + target.id);
+        else if (target.tagName) parts.push("<" + target.tagName.toLowerCase() + ">");
+      }
+      if (typeof e.key === "string") parts.push("key: " + e.key);
+      if (typeof e.button === "number" && /click|mouse|pointer|contextmenu/.test(e.type)) {
+        parts.push(e.clientX + "," + e.clientY);
+      }
+      if (target && typeof target.value === "string" && /^(input|change|keyup|keydown|blur)$/.test(e.type)) {
+        const v = target.value;
+        parts.push('value: "' + (v.length > 60 ? v.slice(0, 60) + "\u2026" : v) + '"');
+      }
+      return parts.join(" \xB7 ");
+    }
+    function disarmEventMonitor() {
+      monitorRegs.forEach((r) => {
+        try {
+          r.el.removeEventListener(r.type, r.fn, true);
+        } catch (e) {
+        }
+      });
+      monitorRegs = [];
+    }
+    function armEventMonitor() {
+      disarmEventMonitor();
+      if (!eventMonitorOn) return;
+      if (typeof PrimeFaces === "undefined" || !PrimeFaces.widgets) return;
+      const attached = /* @__PURE__ */ new Map();
+      for (const [varName, widget] of Object.entries(PrimeFaces.widgets)) {
+        if (!widget || !widget.id) continue;
+        const rootEl = document.getElementById(widget.id);
+        if (!rootEl) continue;
+        const events = extractEvents(rootEl, true);
+        events.forEach((ev) => {
+          const type = domEventType(ev);
+          if (!type || MONITOR_EXCLUDED.has(type)) return;
+          const ownerEl = ev.source === "inline" && ev.ownerId && document.getElementById(ev.ownerId) || rootEl;
+          let types = attached.get(ownerEl);
+          if (!types) {
+            types = /* @__PURE__ */ new Set();
+            attached.set(ownerEl, types);
+          }
+          if (types.has(type)) return;
+          types.add(type);
+          const fn = (e) => {
+            if (!eventMonitorOn) return;
+            const now = Date.now();
+            if (now - monitorWindowStart > 1e3) {
+              monitorWindowStart = now;
+              monitorWindowCount = 0;
+            }
+            if (++monitorWindowCount > 50) return;
+            postInspectorMessage(eventFiredMessage({
+              widgetVar: varName,
+              ownerId: ownerEl.id || widget.id || null,
+              event: type,
+              source: ev.source,
+              ts: now,
+              detail: summarizeDomEvent(e)
+            }));
+          };
+          ownerEl.addEventListener(type, fn, true);
+          monitorRegs.push({ el: ownerEl, type, fn });
+        });
+      }
+    }
+    function startEventMonitor() {
+      eventMonitorOn = true;
+      armEventMonitor();
+    }
+    function stopEventMonitor() {
+      eventMonitorOn = false;
+      disarmEventMonitor();
+    }
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
       if (event.data && event.data.type === MSG.COLLECT) {
@@ -617,9 +842,16 @@
         const widgets = collectWidgets({ showJqueryEvents: !!event.data.showJqueryEvents });
         const info = getPageInfo();
         postInspectorMessage(dataMessage(widgets, info));
+        if (eventMonitorOn) armEventMonitor();
       }
       if (event.data && event.data.type === MSG.HOOK_AJAX) {
         hookAjax();
+      }
+      if (event.data && event.data.type === MSG.EVENT_MONITOR_START) {
+        startEventMonitor();
+      }
+      if (event.data && event.data.type === MSG.EVENT_MONITOR_STOP) {
+        stopEventMonitor();
       }
       if (event.data && event.data.type === MSG.EXEC_API) {
         const { widgetVar, method, args, callId } = event.data;
@@ -683,6 +915,7 @@
         }
       }
     });
+    hookXhrTimeline();
     if (typeof PrimeFaces !== "undefined") {
       hookAjax();
     }

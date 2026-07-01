@@ -278,6 +278,23 @@
     widgets: {},
     ab: function(cfg) {
       console.log('[PF.ab]', cfg);
+      // Emitir una petición JSF real (como haría PrimeFaces) para poder
+      // probar el timeline Ajax del inspector. El servidor de test no
+      // devuelve una partial-response, pero el payload es realista.
+      try {
+        const params = new URLSearchParams();
+        params.set('javax.faces.partial.ajax', 'true');
+        params.set('javax.faces.source', cfg.s || '');
+        params.set('javax.faces.partial.execute', cfg.p || '@all');
+        if (cfg.u) params.set('javax.faces.partial.render', cfg.u);
+        if (cfg.e) params.set('javax.faces.behavior.event', cfg.e);
+        if (cfg.f) params.set(cfg.f, cfg.f);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', window.location.href);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        xhr.setRequestHeader('Faces-Request', 'partial/ajax');
+        xhr.send(params.toString());
+      } catch (e) { console.warn('[PF.ab] XHR de test falló', e); }
     },
     ajax: {
       Response: {

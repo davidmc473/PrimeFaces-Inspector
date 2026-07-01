@@ -1,3 +1,37 @@
+/** Inyecta el content script si aún no está y le envía un mensaje. */
+async function sendToTab(tabId, message) {
+  try {
+    await chrome.tabs.sendMessage(tabId, message);
+  } catch (e) {
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ['dist/content.css'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['dist/content.js'] });
+    await new Promise(r => setTimeout(r, 50));
+    await chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
+/* ── Menú contextual: "Inspeccionar widget PrimeFaces" ── */
+const CTX_MENU_ID = 'pfi-inspect-widget';
+
+chrome.runtime.onInstalled.addListener(() => {
+  const lang = (chrome.i18n?.getUILanguage() || 'en').toLowerCase();
+  const title = lang.startsWith('es')
+    ? 'Inspeccionar widget PrimeFaces'
+    : 'Inspect PrimeFaces widget';
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: CTX_MENU_ID, title, contexts: ['all'] });
+  });
+});
+
+chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== CTX_MENU_ID || !tab || !tab.id) return;
+  try {
+    await sendToTab(tab.id, { action: 'inspectContextTarget' });
+  } catch (err) {
+    console.warn('PF Inspector: no se pudo inyectar en esta página.', err);
+  }
+});
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab || !tab.id) return;
   try {

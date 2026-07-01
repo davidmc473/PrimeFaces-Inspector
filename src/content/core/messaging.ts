@@ -2,6 +2,8 @@ import { state } from './state.js';
 import { config } from './config.js';
 import {
   collectMessage,
+  eventMonitorStartMessage,
+  eventMonitorStopMessage,
   execApiMessage,
   execEventMessage,
   postInspectorMessage,
@@ -32,6 +34,14 @@ export function executeInlineEvent(
   widgetVar: string | null
 ): void {
   postInspectorMessage(execEventMessage(ownerId, eventAttr, widgetVar));
+}
+
+export function startEventMonitor(): void {
+  postInspectorMessage(eventMonitorStartMessage());
+}
+
+export function stopEventMonitor(): void {
+  postInspectorMessage(eventMonitorStopMessage());
 }
 
 export function injectPageScript(): void {

@@ -10,6 +10,9 @@ import {
   updateMessage,
   execResultMessage,
   readyMessage,
+  ajaxStartMessage,
+  ajaxDoneMessage,
+  eventFiredMessage,
   postInspectorMessage,
 } from '../src/shared/messages.js';
 
@@ -637,6 +640,222 @@ import {
     }
   }
 
+  /* ── Timeline Ajax: intercepción a nivel de XMLHttpRequest ──
+     PrimeFaces envía sus peticiones parciales vía jQuery/XHR con el
+     payload urlencoded `javax.faces.partial.ajax=true` (o `jakarta.*`
+     en Faces 4+). Interceptar XHR captura TODAS las peticiones JSF,
+     incluidas las que van con global:false (que no disparan los
+     eventos globales de jQuery), y permite medir el tiempo real. */
+
+  const MAX_REQ_BODY = 2000;
+  const MAX_RES_BODY = 4000;
+  let ajaxSeq = 0;
+
+  /** Extrae los parámetros JSF relevantes del payload urlencoded, o null si no es una petición faces */
+  function parseFacesRequestBody(body) {
+    if (typeof body !== 'string' || body.indexOf('faces.partial.ajax') === -1) return null;
+    try {
+      const sp = new URLSearchParams(body);
+      let ns = null;
+      if (sp.get('javax.faces.partial.ajax') === 'true') ns = 'javax';
+      else if (sp.get('jakarta.faces.partial.ajax') === 'true') ns = 'jakarta';
+      if (!ns) return null;
+      return {
+        source: sp.get(ns + '.faces.source'),
+        process: sp.get(ns + '.faces.partial.execute'),
+        update: sp.get(ns + '.faces.partial.render'),
+        event: sp.get(ns + '.faces.behavior.event'),
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Extrae updates aplicados, error y redirect de una partial-response */
+  function parseFacesResponse(xhr) {
+    const out = { updates: [], errorName: null, errorMessage: null, redirect: null, responseBody: '' };
+    try {
+      const text = xhr.responseText || '';
+      out.responseBody = text.slice(0, MAX_RES_BODY);
+      let xml = null;
+      try { xml = xhr.responseXML; } catch (e) { /* responseType incompatible */ }
+      if (!xml && text.indexOf('<partial-response') !== -1) {
+        xml = new DOMParser().parseFromString(text, 'text/xml');
+      }
+      if (!xml) return out;
+      const ups = xml.getElementsByTagName('update');
+      for (let i = 0; i < ups.length; i++) {
+        const uid = ups[i].getAttribute('id');
+        if (uid) out.updates.push(uid);
+      }
+      const err = xml.getElementsByTagName('error')[0];
+      if (err) {
+        const en = err.getElementsByTagName('error-name')[0];
+        const em = err.getElementsByTagName('error-message')[0];
+        out.errorName = (en && en.textContent) || 'error';
+        out.errorMessage = em ? String(em.textContent || '').slice(0, 300) : null;
+      }
+      const red = xml.getElementsByTagName('redirect')[0];
+      if (red) out.redirect = red.getAttribute('url');
+    } catch (e) { /* respuesta no parseable */ }
+    return out;
+  }
+
+  function hookXhrTimeline() {
+    if (window.__pfInspectorXhrHooked) return;
+    window.__pfInspectorXhrHooked = true;
+
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      try {
+        this.__pfiMethod = method;
+        this.__pfiUrl = String(url);
+      } catch (e) { /* silenciar */ }
+      return origOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function (body) {
+      try {
+        const params = parseFacesRequestBody(body);
+        if (params) {
+          const id = 'ax' + (++ajaxSeq) + '_' + Date.now().toString(36);
+          const start = Date.now();
+          postInspectorMessage(ajaxStartMessage({
+            id: id,
+            url: this.__pfiUrl || '',
+            method: this.__pfiMethod || 'POST',
+            source: params.source,
+            process: params.process,
+            update: params.update,
+            event: params.event,
+            requestBody: String(body).slice(0, MAX_REQ_BODY),
+            ts: start,
+          }));
+          this.addEventListener('loadend', () => {
+            const res = parseFacesResponse(this);
+            const httpOk = this.status >= 200 && this.status < 300;
+            postInspectorMessage(ajaxDoneMessage({
+              id: id,
+              status: this.status,
+              ok: httpOk && !res.errorName,
+              durationMs: Date.now() - start,
+              updates: res.updates,
+              errorName: httpOk ? res.errorName : (res.errorName || 'HTTP ' + this.status),
+              errorMessage: res.errorMessage,
+              redirect: res.redirect,
+              responseBody: res.responseBody,
+            }));
+            // El DOM puede haber sido reemplazado por los updates:
+            // re-armar los listeners del monitor de eventos en vivo.
+            if (eventMonitorOn) setTimeout(armEventMonitor, 250);
+          });
+        }
+      } catch (e) { /* silenciar */ }
+      return origSend.apply(this, arguments);
+    };
+  }
+
+  /* ── Monitor de eventos en vivo ──
+     Adjunta listeners de captura para los eventos ya detectados de cada
+     widget (inline y jQuery — ambos son eventos DOM nativos por debajo)
+     y notifica cada disparo con timestamp y un resumen de argumentos. */
+
+  let eventMonitorOn = false;
+  let monitorRegs = [];
+  // Eventos de alta frecuencia que inundarían el log
+  const MONITOR_EXCLUDED = new Set([
+    'mousemove', 'pointermove', 'mouseover', 'mouseout', 'pointerover',
+    'pointerout', 'mouseenter', 'mouseleave', 'scroll', 'wheel',
+    'touchmove', 'drag', 'dragover',
+  ]);
+  // Límite de seguridad: máx. mensajes por segundo
+  let monitorWindowStart = 0;
+  let monitorWindowCount = 0;
+
+  /** 'onclick' → 'click'; 'click.ns (delegated: …) #2' → 'click' */
+  function domEventType(ev) {
+    if (ev.source === 'inline') return ev.event.replace(/^on/i, '').toLowerCase();
+    const m = String(ev.event).match(/^([a-zA-Z]+)/);
+    return m ? m[1].toLowerCase() : null;
+  }
+
+  function summarizeDomEvent(e) {
+    const parts = [];
+    const target = e.target;
+    if (target) {
+      if (target.id) parts.push('#' + target.id);
+      else if (target.tagName) parts.push('<' + target.tagName.toLowerCase() + '>');
+    }
+    if (typeof e.key === 'string') parts.push('key: ' + e.key);
+    if (typeof e.button === 'number' && /click|mouse|pointer|contextmenu/.test(e.type)) {
+      parts.push(e.clientX + ',' + e.clientY);
+    }
+    if (target && typeof target.value === 'string' && /^(input|change|keyup|keydown|blur)$/.test(e.type)) {
+      const v = target.value;
+      parts.push('value: "' + (v.length > 60 ? v.slice(0, 60) + '…' : v) + '"');
+    }
+    return parts.join(' · ');
+  }
+
+  function disarmEventMonitor() {
+    monitorRegs.forEach(r => {
+      try { r.el.removeEventListener(r.type, r.fn, true); } catch (e) { /* */ }
+    });
+    monitorRegs = [];
+  }
+
+  function armEventMonitor() {
+    disarmEventMonitor();
+    if (!eventMonitorOn) return;
+    if (typeof PrimeFaces === 'undefined' || !PrimeFaces.widgets) return;
+
+    const attached = new Map(); // el → Set(type) para no duplicar listeners
+    for (const [varName, widget] of Object.entries(PrimeFaces.widgets)) {
+      if (!widget || !widget.id) continue;
+      const rootEl = document.getElementById(widget.id);
+      if (!rootEl) continue;
+      const events = extractEvents(rootEl, true);
+      events.forEach(ev => {
+        const type = domEventType(ev);
+        if (!type || MONITOR_EXCLUDED.has(type)) return;
+        const ownerEl = (ev.source === 'inline' && ev.ownerId && document.getElementById(ev.ownerId)) || rootEl;
+        let types = attached.get(ownerEl);
+        if (!types) { types = new Set(); attached.set(ownerEl, types); }
+        if (types.has(type)) return;
+        types.add(type);
+
+        const fn = (e) => {
+          if (!eventMonitorOn) return;
+          const now = Date.now();
+          if (now - monitorWindowStart > 1000) { monitorWindowStart = now; monitorWindowCount = 0; }
+          if (++monitorWindowCount > 50) return;
+          postInspectorMessage(eventFiredMessage({
+            widgetVar: varName,
+            ownerId: ownerEl.id || widget.id || null,
+            event: type,
+            source: ev.source,
+            ts: now,
+            detail: summarizeDomEvent(e),
+          }));
+        };
+        ownerEl.addEventListener(type, fn, true);
+        monitorRegs.push({ el: ownerEl, type: type, fn: fn });
+      });
+    }
+  }
+
+  function startEventMonitor() {
+    eventMonitorOn = true;
+    armEventMonitor();
+  }
+
+  function stopEventMonitor() {
+    eventMonitorOn = false;
+    disarmEventMonitor();
+  }
+
   /* ── Escuchar mensajes del content script ── */
 
   window.addEventListener('message', (event) => {
@@ -647,10 +866,20 @@ import {
       const widgets = collectWidgets({ showJqueryEvents: !!event.data.showJqueryEvents });
       const info = getPageInfo();
       postInspectorMessage(dataMessage(widgets, info));
+      // Los widgets pueden haber cambiado: re-armar el monitor si está activo
+      if (eventMonitorOn) armEventMonitor();
     }
 
     if (event.data && event.data.type === MSG.HOOK_AJAX) {
       hookAjax();
+    }
+
+    if (event.data && event.data.type === MSG.EVENT_MONITOR_START) {
+      startEventMonitor();
+    }
+
+    if (event.data && event.data.type === MSG.EVENT_MONITOR_STOP) {
+      stopEventMonitor();
     }
 
     if (event.data && event.data.type === MSG.EXEC_API) {
@@ -722,6 +951,7 @@ import {
     }
   });
 
+  hookXhrTimeline();
   if (typeof PrimeFaces !== 'undefined') {
     hookAjax();
   }

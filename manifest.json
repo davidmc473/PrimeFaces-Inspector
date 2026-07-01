@@ -3,7 +3,7 @@
   "name": "PrimeFaces Inspector",
   "version": "0.4.0",
   "description": "Inspect PrimeFaces widgets: list, search, filter, Client API, events and Ajax monitoring.",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["activeTab", "storage", "scripting", "contextMenus"],
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",

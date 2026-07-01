@@ -1,4 +1,4 @@
-import type { ExecResult, PageInfo, Widget } from '../../shared/types.js';
+import type { AjaxLogEntry, ExecResult, FiredEvent, PageInfo, Widget } from '../../shared/types.js';
 
 export interface InspectorState {
   /** Elemento host del Shadow DOM, hijo directo de <body> */
@@ -18,6 +18,12 @@ export interface InspectorState {
   ctrlShiftFired: boolean;
   callSeq: number;
   pendingResultCallbacks: Map<string, (data: ExecResult) => void>;
+  /** Historial de peticiones Ajax interceptadas (más reciente primero) */
+  ajaxLog: AjaxLogEntry[];
+  /** Disparos de eventos capturados en vivo (más reciente primero) */
+  eventLog: FiredEvent[];
+  /** Si la captura de eventos en vivo está activa */
+  eventMonitorOn: boolean;
 }
 
 export const state: InspectorState = {
@@ -43,4 +49,7 @@ export const state: InspectorState = {
   ctrlShiftFired: false,
   callSeq: 0,
   pendingResultCallbacks: new Map(),
+  ajaxLog: [],
+  eventLog: [],
+  eventMonitorOn: false,
 };

@@ -14,6 +14,7 @@ export default {
   jqueryMissing: '(jQuery not found)',
 
   btnSelect: 'Selection mode (Ctrl+Shift)',
+  btnMonitor: 'Monitor (Ajax & events)',
   btnConfig: 'Settings',
   btnRefresh: 'Refresh',
   btnClose: 'Close',
@@ -88,4 +89,25 @@ export default {
   cfgVersion: 'Version',
   cfgRepo: 'Repository',
   cfgReset: 'Reset colors',
+
+  monTitle: 'Monitor',
+  monTabAjax: 'Ajax',
+  monTabEvents: 'Events',
+  monClear: 'Clear log',
+  monLiveOn: 'Live',
+  monLiveOff: 'Capture',
+  monLiveStart: 'Start live event capture',
+  monLiveStop: 'Stop event capture',
+  monAjaxEmpty: 'No Ajax requests recorded yet. Interact with the page to see them here.',
+  monEventsEmpty: 'Capture is on: interact with the widgets to record their events.',
+  monEventsPaused: 'Capture is paused. Press "Capture" to record events live.',
+  monPending: 'pending',
+  monStatus: 'Status',
+  monDuration: 'Duration',
+  monErrorMsg: 'Error',
+  monUpdatesApplied: 'Applied updates',
+  monRequest: 'Request payload',
+  monResponse: 'Response',
+
+  ctxNoWidget: 'No PrimeFaces widget under the cursor.',
 };

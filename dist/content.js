@@ -87,7 +87,10 @@
     selectionMode: false,
     ctrlShiftFired: false,
     callSeq: 0,
-    pendingResultCallbacks: /* @__PURE__ */ new Map()
+    pendingResultCallbacks: /* @__PURE__ */ new Map(),
+    ajaxLog: [],
+    eventLog: [],
+    eventMonitorOn: false
   };
 
   // src/content/core/highlights.js
@@ -185,7 +188,17 @@
     /** content → page: instalar los hooks de Ajax sin recolectar */
     HOOK_AJAX: "PF_INSPECTOR_HOOK_AJAX",
     /** page → content: el page script está cargado */
-    READY: "PF_INSPECTOR_READY"
+    READY: "PF_INSPECTOR_READY",
+    /** page → content: enviada una petición Ajax JSF (timeline) */
+    AJAX_START: "PF_INSPECTOR_AJAX_START",
+    /** page → content: finalizada una petición Ajax JSF (timeline) */
+    AJAX_DONE: "PF_INSPECTOR_AJAX_DONE",
+    /** content → page: empezar a capturar disparos de eventos en vivo */
+    EVENT_MONITOR_START: "PF_INSPECTOR_EVENT_MONITOR_START",
+    /** content → page: dejar de capturar disparos de eventos */
+    EVENT_MONITOR_STOP: "PF_INSPECTOR_EVENT_MONITOR_STOP",
+    /** page → content: un evento monitorizado se ha disparado */
+    EVENT_FIRED: "PF_INSPECTOR_EVENT_FIRED"
   };
   function collectMessage(showJqueryEvents) {
     return { type: MSG.COLLECT, showJqueryEvents };
@@ -195,6 +208,12 @@
   }
   function execEventMessage(ownerId, eventAttr, widgetVar) {
     return { type: MSG.EXEC_EVENT, ownerId, eventAttr, widgetVar };
+  }
+  function eventMonitorStartMessage() {
+    return { type: MSG.EVENT_MONITOR_START };
+  }
+  function eventMonitorStopMessage() {
+    return { type: MSG.EVENT_MONITOR_STOP };
   }
   function postInspectorMessage(msg) {
     window.postMessage(msg, "*");
@@ -214,6 +233,12 @@
   }
   function executeInlineEvent(ownerId, eventAttr, widgetVar) {
     postInspectorMessage(execEventMessage(ownerId, eventAttr, widgetVar));
+  }
+  function startEventMonitor() {
+    postInspectorMessage(eventMonitorStartMessage());
+  }
+  function stopEventMonitor() {
+    postInspectorMessage(eventMonitorStopMessage());
   }
   function injectPageScript() {
     if (document.getElementById("pf-inspector-page-script")) return;
@@ -238,6 +263,7 @@
     pfExtNotDetected: "PF Extensions not detected.",
     jqueryMissing: "(jQuery not found)",
     btnSelect: "Selection mode (Ctrl+Shift)",
+    btnMonitor: "Monitor (Ajax & events)",
     btnConfig: "Settings",
     btnRefresh: "Refresh",
     btnClose: "Close",
@@ -305,7 +331,26 @@
     cfgAbout: "About",
     cfgVersion: "Version",
     cfgRepo: "Repository",
-    cfgReset: "Reset colors"
+    cfgReset: "Reset colors",
+    monTitle: "Monitor",
+    monTabAjax: "Ajax",
+    monTabEvents: "Events",
+    monClear: "Clear log",
+    monLiveOn: "Live",
+    monLiveOff: "Capture",
+    monLiveStart: "Start live event capture",
+    monLiveStop: "Stop event capture",
+    monAjaxEmpty: "No Ajax requests recorded yet. Interact with the page to see them here.",
+    monEventsEmpty: "Capture is on: interact with the widgets to record their events.",
+    monEventsPaused: 'Capture is paused. Press "Capture" to record events live.',
+    monPending: "pending",
+    monStatus: "Status",
+    monDuration: "Duration",
+    monErrorMsg: "Error",
+    monUpdatesApplied: "Applied updates",
+    monRequest: "Request payload",
+    monResponse: "Response",
+    ctxNoWidget: "No PrimeFaces widget under the cursor."
   };
 
   // src/i18n/es.js
@@ -323,6 +368,7 @@
     pfExtNotDetected: "PF Extensions no detectado.",
     jqueryMissing: "(jQuery no encontrado)",
     btnSelect: "Modo selecci\xF3n (Ctrl+Shift)",
+    btnMonitor: "Monitor (Ajax y eventos)",
     btnConfig: "Configuraci\xF3n",
     btnRefresh: "Actualizar",
     btnClose: "Cerrar",
@@ -390,7 +436,26 @@
     cfgAbout: "Acerca de",
     cfgVersion: "Versi\xF3n",
     cfgRepo: "Repositorio",
-    cfgReset: "Restablecer colores"
+    cfgReset: "Restablecer colores",
+    monTitle: "Monitor",
+    monTabAjax: "Ajax",
+    monTabEvents: "Eventos",
+    monClear: "Limpiar registro",
+    monLiveOn: "En vivo",
+    monLiveOff: "Capturar",
+    monLiveStart: "Iniciar la captura de eventos en vivo",
+    monLiveStop: "Detener la captura de eventos",
+    monAjaxEmpty: "Sin peticiones Ajax registradas todav\xEDa. Interact\xFAa con la p\xE1gina para verlas aqu\xED.",
+    monEventsEmpty: "Captura activa: interact\xFAa con los widgets para registrar sus eventos.",
+    monEventsPaused: 'La captura est\xE1 pausada. Pulsa "Capturar" para registrar los eventos en vivo.',
+    monPending: "pendiente",
+    monStatus: "Estado",
+    monDuration: "Duraci\xF3n",
+    monErrorMsg: "Error",
+    monUpdatesApplied: "Updates aplicados",
+    monRequest: "Payload de la petici\xF3n",
+    monResponse: "Respuesta",
+    ctxNoWidget: "Ning\xFAn widget PrimeFaces bajo el cursor."
   };
 
   // src/content/core/i18n.js
@@ -441,6 +506,9 @@
     "alert-triangle": '<path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>',
     "check-circle": '<path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>',
     "check": '<path d="m4.5 12.75 6 6 9-13.5"/>',
+    "activity": '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    "pause": '<path d="M15.75 5.25v13.5m-7.5-13.5v13.5"/>',
+    "trash": '<path d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/>',
     /* ── Iconos de categoría de componente ── */
     "table-cells": '<path d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5"/>',
     "cursor-rays": '<path d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672ZM12 2.25V4.5m5.834.166-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243-1.59-1.59"/>',
@@ -1487,6 +1555,219 @@
     else activateSelectionMode(callbacks);
   }
 
+  // src/content/ui/monitor.js
+  var MAX_AJAX_ENTRIES = 100;
+  var MAX_EVENT_ENTRIES = 200;
+  var activeTab = "ajax";
+  var expandedIds = /* @__PURE__ */ new Set();
+  function onAjaxStart(data) {
+    state.ajaxLog.unshift({ ...data, pending: true });
+    if (state.ajaxLog.length > MAX_AJAX_ENTRIES) state.ajaxLog.length = MAX_AJAX_ENTRIES;
+    renderIfOpen("ajax");
+  }
+  function onAjaxDone(data) {
+    const entry = state.ajaxLog.find((e) => e.id === data.id);
+    if (!entry) return;
+    Object.assign(entry, data, { pending: false });
+    renderIfOpen("ajax");
+  }
+  function onEventFired(data) {
+    state.eventLog.unshift(data);
+    if (state.eventLog.length > MAX_EVENT_ENTRIES) state.eventLog.length = MAX_EVENT_ENTRIES;
+    renderIfOpen("events");
+  }
+  function getOverlay() {
+    return state.panelEl ? state.panelEl.querySelector(".pfi-monitor-overlay") : null;
+  }
+  function toggleMonitor() {
+    const existing = getOverlay();
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    showMonitor();
+  }
+  function showMonitor() {
+    if (!state.panelEl) return;
+    const prev = getOverlay();
+    if (prev) prev.remove();
+    const overlay = document.createElement("div");
+    overlay.className = "pfi-monitor-overlay";
+    overlay.innerHTML = `
+    <div class="pfi-overlay-header">
+      <button class="pfi-icon-btn" data-role="close" title="${escAttr(t("back"))}">${icon("arrow-left", 14)}</button>
+      <span class="pfi-overlay-title">${icon("activity", 14)} ${escHtml(t("monTitle"))}</span>
+      <button class="pfi-icon-btn" data-role="clear" title="${escAttr(t("monClear"))}">${icon("trash", 14)}</button>
+    </div>
+    <div class="pfi-mon-tabs">
+      <button class="pfi-mon-tab" data-tab="ajax">${escHtml(t("monTabAjax"))} <span class="pfi-mon-tab-count" data-role="count-ajax"></span></button>
+      <button class="pfi-mon-tab" data-tab="events">${escHtml(t("monTabEvents"))} <span class="pfi-mon-tab-count" data-role="count-events"></span></button>
+      <button class="pfi-mon-live-btn" data-role="live" title="${escAttr(t("monLiveStart"))}"></button>
+    </div>
+    <div class="pfi-mon-body" data-role="body"></div>
+  `;
+    state.panelEl.appendChild(overlay);
+    overlay.querySelector('[data-role="close"]').addEventListener("click", () => overlay.remove());
+    overlay.querySelector('[data-role="clear"]').addEventListener("click", () => {
+      if (activeTab === "ajax") {
+        state.ajaxLog = [];
+        expandedIds.clear();
+      } else state.eventLog = [];
+      renderMonitor();
+    });
+    overlay.querySelectorAll(".pfi-mon-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeTab = btn.getAttribute("data-tab");
+        renderMonitor();
+      });
+    });
+    overlay.querySelector('[data-role="live"]').addEventListener("click", () => {
+      state.eventMonitorOn = !state.eventMonitorOn;
+      if (state.eventMonitorOn) {
+        startEventMonitor();
+        activeTab = "events";
+      } else stopEventMonitor();
+      renderMonitor();
+    });
+    renderMonitor();
+  }
+  function renderIfOpen(tab) {
+    const overlay = getOverlay();
+    if (!overlay) return;
+    updateTabCounts(overlay);
+    if (activeTab === tab) renderBody(overlay);
+  }
+  function updateTabCounts(overlay) {
+    const ca = overlay.querySelector('[data-role="count-ajax"]');
+    const ce = overlay.querySelector('[data-role="count-events"]');
+    if (ca) ca.textContent = state.ajaxLog.length || "";
+    if (ce) ce.textContent = state.eventLog.length || "";
+  }
+  function renderMonitor() {
+    const overlay = getOverlay();
+    if (!overlay) return;
+    overlay.querySelectorAll(".pfi-mon-tab").forEach((btn) => {
+      btn.classList.toggle("pfi-mon-tab-active", btn.getAttribute("data-tab") === activeTab);
+    });
+    updateTabCounts(overlay);
+    const liveBtn = overlay.querySelector('[data-role="live"]');
+    liveBtn.innerHTML = state.eventMonitorOn ? icon("pause", 12) + " " + escHtml(t("monLiveOn")) : icon("play", 12) + " " + escHtml(t("monLiveOff"));
+    liveBtn.classList.toggle("pfi-mon-live-active", state.eventMonitorOn);
+    liveBtn.title = state.eventMonitorOn ? t("monLiveStop") : t("monLiveStart");
+    renderBody(overlay);
+  }
+  function renderBody(overlay) {
+    const body = overlay.querySelector('[data-role="body"]');
+    if (!body) return;
+    if (activeTab === "ajax") renderAjaxTab(body);
+    else renderEventsTab(body);
+  }
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    const pad = (n, w) => String(n).padStart(w, "0");
+    return `${pad(d.getHours(), 2)}:${pad(d.getMinutes(), 2)}:${pad(d.getSeconds(), 2)}.${pad(d.getMilliseconds(), 3)}`;
+  }
+  function ajaxStatusClass(e) {
+    if (e.pending) return "pfi-mon-st-pending";
+    return e.ok ? "pfi-mon-st-ok" : "pfi-mon-st-err";
+  }
+  function ajaxStatusText(e) {
+    if (e.pending) return t("monPending");
+    if (e.ok) return String(e.status);
+    return e.errorName || String(e.status);
+  }
+  function prettyRequestBody(body) {
+    try {
+      return String(body).split("&").map((pair) => {
+        try {
+          return decodeURIComponent(pair.replace(/\+/g, " "));
+        } catch (e) {
+          return pair;
+        }
+      }).join("\n");
+    } catch (e) {
+      return String(body);
+    }
+  }
+  function detailRow(label, value, mono = true) {
+    if (value === null || value === void 0 || value === "") return "";
+    return `<div class="pfi-detail-row">
+    <span class="pfi-detail-label">${escHtml(label)}</span>
+    <span class="pfi-detail-value${mono ? " pfi-mono" : ""}">${escHtml(String(value))}</span>
+  </div>`;
+  }
+  function renderAjaxTab(body) {
+    if (state.ajaxLog.length === 0) {
+      body.innerHTML = `<div class="pfi-empty">${escHtml(t("monAjaxEmpty"))}</div>`;
+      return;
+    }
+    body.innerHTML = state.ajaxLog.map((e) => {
+      const expanded = expandedIds.has(e.id);
+      const duration = e.pending ? "\u2026" : `${e.durationMs} ms`;
+      const main = e.source || "\u2014";
+      const evBadge = e.event ? `<span class="pfi-mon-event-badge">${escHtml(e.event)}</span>` : "";
+      let detail = "";
+      if (expanded) {
+        const updatesApplied = e.updates && e.updates.length ? e.updates.filter((u) => !/ViewState|ViewRoot/.test(u)).join(", ") || e.updates.join(", ") : null;
+        detail = `<div class="pfi-mon-detail">
+        ${detailRow("source", e.source)}
+        ${detailRow("event", e.event)}
+        ${detailRow("process", e.process)}
+        ${detailRow("update", e.update)}
+        ${detailRow(t("monStatus"), e.pending ? t("monPending") : e.ok ? `${e.status} OK` : e.errorName || e.status, false)}
+        ${e.errorMessage ? detailRow(t("monErrorMsg"), e.errorMessage, false) : ""}
+        ${e.redirect ? detailRow("redirect", e.redirect) : ""}
+        ${e.pending ? "" : detailRow(t("monDuration"), `${e.durationMs} ms`, false)}
+        ${updatesApplied ? detailRow(t("monUpdatesApplied"), updatesApplied) : ""}
+        <details class="pfi-mon-payload">
+          <summary>${escHtml(t("monRequest"))}</summary>
+          <pre class="pfi-result-pre">${escHtml(prettyRequestBody(e.requestBody))}</pre>
+        </details>
+        ${e.responseBody ? `<details class="pfi-mon-payload">
+          <summary>${escHtml(t("monResponse"))}</summary>
+          <pre class="pfi-result-pre">${escHtml(e.responseBody)}</pre>
+        </details>` : ""}
+      </div>`;
+      }
+      return `<div class="pfi-mon-row${expanded ? " pfi-mon-expanded" : ""}" data-id="${escAttr(e.id)}">
+      <div class="pfi-mon-row-head" data-role="head">
+        <span class="pfi-mon-status ${ajaxStatusClass(e)}" title="${escAttr(ajaxStatusText(e))}"></span>
+        <span class="pfi-mon-main pfi-mono" title="${escAttr(main)}">${escHtml(main)}</span>
+        ${evBadge}
+        <span class="pfi-mon-duration">${escHtml(duration)}</span>
+        <span class="pfi-mon-ts">${fmtTime(e.ts)}</span>
+      </div>
+      ${detail}
+    </div>`;
+    }).join("");
+    body.querySelectorAll('.pfi-mon-row [data-role="head"]').forEach((head) => {
+      head.addEventListener("click", () => {
+        const id = head.parentElement.getAttribute("data-id");
+        if (expandedIds.has(id)) expandedIds.delete(id);
+        else expandedIds.add(id);
+        renderBody(getOverlay());
+      });
+    });
+  }
+  function renderEventsTab(body) {
+    if (state.eventLog.length === 0) {
+      const hint = state.eventMonitorOn ? t("monEventsEmpty") : t("monEventsPaused");
+      body.innerHTML = `<div class="pfi-empty">${escHtml(hint)}</div>`;
+      return;
+    }
+    body.innerHTML = state.eventLog.map((e) => `
+    <div class="pfi-mon-row pfi-mon-event-row">
+      <div class="pfi-mon-row-head">
+        <span class="pfi-event-badge pfi-event-badge-${e.source === "jquery" ? "jquery" : "inline"}">${escHtml(e.source === "jquery" ? t("sourceJquery") : t("sourceInline"))}</span>
+        <span class="pfi-mon-evname pfi-mono">${escHtml(e.event)}</span>
+        <span class="pfi-mon-main pfi-mono" title="${escAttr(e.widgetVar || e.ownerId || "")}">${escHtml(e.widgetVar || e.ownerId || "\u2014")}</span>
+        <span class="pfi-mon-ts">${fmtTime(e.ts)}</span>
+      </div>
+      ${e.detail ? `<div class="pfi-mon-event-detail pfi-mono">${escHtml(e.detail)}</div>` : ""}
+    </div>
+  `).join("");
+  }
+
   // src/content/ui/tooltip.js
   var tipEl = null;
   var currentTarget = null;
@@ -1555,7 +1836,7 @@
   }
 
   // src/styles/panel.css
-  var panel_default = "/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n   PrimeFaces Inspector \u2014 Estilos del panel (Shadow DOM)\n   Esta hoja se inyecta DENTRO del ShadowRoot del panel, por lo que\n   el CSS de la p\xE1gina no puede pisarla (ni al rev\xE9s). Los estilos\n   que se aplican a elementos de la p\xE1gina viven en page.css.\n   Tema oscuro por defecto; .pfi-theme-light invierte las variables\n   \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */\n\n/* \u2500\u2500 Variables del tema \u2500\u2500 */\n#pf-inspector-panel {\n  --bg:          #0d1117;\n  --surface:     #161b22;\n  --surface-2:   #21262d;\n  --border:      #30363d;\n  --border-2:    #444c56;\n  --focus:       #58a6ff;\n\n  --text:        #e6edf3;\n  --text-2:      #8b949e;\n  --text-3:      #484f58;\n\n  --accent:      #58a6ff;\n  --accent-bg:   rgba(88,166,255,.12);\n  --green:       #3fb950;\n  --green-bg:    rgba(63,185,80,.12);\n  --red:         #f85149;\n  --red-bg:      rgba(248,81,73,.12);\n  --yellow:      #d29922;\n  --yellow-bg:   rgba(210,153,34,.12);\n  --orange:      #f97316;\n  --orange-bg:   rgba(249,115,22,.12);\n  --pink:        #f778ba;\n\n  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Courier New', monospace;\n  --sans: 'Segoe UI', system-ui, -apple-system, sans-serif;\n  --radius: 8px;\n  --radius-sm: 5px;\n}\n\n#pf-inspector-panel.pfi-theme-light {\n  --bg:          #ffffff;\n  --surface:     #f6f8fa;\n  --surface-2:   #eaeef2;\n  --border:      #d0d7de;\n  --border-2:    #afb8c1;\n  --focus:       #0969da;\n\n  --text:        #1f2328;\n  --text-2:      #636c76;\n  --text-3:      #8c959f;\n\n  --accent:      #0969da;\n  --accent-bg:   rgba(9,105,218,.10);\n  --green:       #1a7f37;\n  --green-bg:    rgba(26,127,55,.10);\n  --red:         #d1242f;\n  --red-bg:      rgba(209,36,47,.10);\n  --yellow:      #9a6700;\n  --yellow-bg:   rgba(154,103,0,.10);\n  --orange:      #bc4c00;\n  --orange-bg:   rgba(188,76,0,.10);\n  --pink:        #bf4b8a;\n}\n\n/* \u2500\u2500 Panel principal \u2500\u2500 */\n#pf-inspector-panel {\n  position: fixed;\n  top: 10px;\n  right: 10px;\n  width: 390px;\n  max-height: calc(100vh - 20px);\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);\n  z-index: 2147483647;\n  font-family: var(--sans);\n  font-size: 13px;\n  color: var(--text);\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n#pf-inspector-panel * {\n  box-sizing: border-box;\n}\n\n/* \u2500\u2500 Header \u2500\u2500 */\n.pfi-header {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-logo {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n}\n.pfi-title {\n  flex: 1;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  letter-spacing: -.01em;\n}\n.pfi-count {\n  font-size: 11px;\n  color: var(--text-3);\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: 20px;\n  padding: 0 7px;\n  line-height: 18px;\n  margin-right: 2px;\n  font-variant-numeric: tabular-nums;\n}\n\n/* \u2500\u2500 Botones del header \u2500\u2500 */\n.pfi-header-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s, border-color .13s;\n  flex-shrink: 0;\n}\n.pfi-header-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n.pfi-header-btn.pfi-btn-active {\n  background: var(--accent-bg);\n  color: var(--accent);\n  border-color: var(--focus);\n}\n#pfi-btn-close:hover {\n  background: var(--red-bg);\n  color: var(--red);\n  border-color: rgba(248,81,73,.45);\n}\n\n/* \u2500\u2500 Bot\xF3n \xEDcono gen\xE9rico (overlays, forms) \u2500\u2500 */\n.pfi-icon-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s;\n  flex-shrink: 0;\n}\n.pfi-icon-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n\n/* \u2500\u2500 Info bar \u2500\u2500 */\n.pfi-info-bar {\n  display: flex;\n  align-items: flex-start;\n  gap: 8px;\n  padding: 5px 12px;\n  font-size: 11px;\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-info-bar:empty { display: none; }\n\n.pfi-info-bar.pfi-info-ok {\n  background: var(--green-bg);\n  color: var(--green);\n}\n.pfi-info-bar.pfi-info-warn {\n  background: var(--yellow-bg);\n  color: var(--yellow);\n}\n.pfi-info-icon {\n  display: flex;\n  align-items: center;\n  flex-shrink: 0;\n  margin-top: 1px;\n}\n.pfi-info-lines {\n  display: flex;\n  flex-direction: column;\n  gap: 1px;\n  flex: 1;\n  min-width: 0;\n}\n.pfi-info-main  { font-weight: 600; }\n.pfi-info-sub   { opacity: .8; }\n.pfi-info-muted { color: var(--text-3); opacity: 1; }\n.pfi-info-warn-text { color: var(--yellow); }\n\n/* \u2500\u2500 Barra de b\xFAsqueda \u2500\u2500 */\n.pfi-toolbar {\n  display: flex;\n  gap: 6px;\n  padding: 8px 10px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n  position: relative;\n}\n.pfi-search-wrap {\n  flex: 1;\n  position: relative;\n  min-width: 0;\n}\n.pfi-search-icon {\n  position: absolute;\n  left: 9px;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 15px;\n  height: 15px;\n  color: var(--text-3);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  pointer-events: none;\n}\n.pfi-search {\n  width: 100%;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 10px 0 32px;\n  height: 30px;\n  color: var(--text);\n  font-size: 12px;\n  font-family: var(--sans);\n  outline: none;\n  transition: border-color .15s;\n}\n.pfi-search:focus { border-color: var(--focus); }\n.pfi-search::placeholder { color: var(--text-3); }\n\n/* \u2500\u2500 Multi-filtro \u2500\u2500 */\n.pfi-multi-filter {\n  position: relative;\n  flex-shrink: 0;\n  height: 30px;\n}\n.pfi-filter-btn {\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 8px;\n  height: 30px;\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  min-width: 100px;\n  max-width: 140px;\n  transition: border-color .13s, color .13s;\n}\n.pfi-filter-btn:hover { border-color: var(--border-2); color: var(--text); }\n.pfi-filter-btn > span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n.pfi-filter-dropdown {\n  position: absolute;\n  right: 0;\n  top: calc(100% + 4px);\n  width: 220px;\n  max-height: 260px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 24px rgba(0,0,0,.4);\n  z-index: 10;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-filter-dropdown[hidden] { display: none; }\n.pfi-filter-list { flex: 1; overflow-y: auto; padding: 4px 0; }\n.pfi-filter-row {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 5px 10px;\n  cursor: pointer;\n  font-size: 12px;\n  color: var(--text);\n}\n.pfi-filter-row:hover { background: var(--surface-2); }\n.pfi-filter-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }\n.pfi-filter-row > span > svg { flex-shrink: 0; color: var(--accent); }\n.pfi-filter-row input[type=checkbox] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }\n.pfi-filter-empty { text-align: center; color: var(--text-3); font-size: 11px; padding: 8px; }\n.pfi-filter-footer {\n  border-top: 1px solid var(--border);\n  padding: 4px 8px;\n  text-align: right;\n}\n\n/* \u2500\u2500 Lista de widgets \u2500\u2500 */\n.pfi-list {\n  flex: 1;\n  overflow-y: auto;\n  padding: 6px;\n  min-height: 60px;\n}\n.pfi-empty {\n  text-align: center;\n  padding: 32px 16px;\n  color: var(--text-3);\n  font-size: 12px;\n}\n\n/* Scrollbars */\n.pfi-list::-webkit-scrollbar,\n.pfi-filter-list::-webkit-scrollbar,\n.pfi-cfg-body::-webkit-scrollbar,\n.pfi-overlay-body::-webkit-scrollbar {\n  width: 4px;\n}\n.pfi-list::-webkit-scrollbar-track,\n.pfi-filter-list::-webkit-scrollbar-track,\n.pfi-cfg-body::-webkit-scrollbar-track {\n  background: transparent;\n}\n.pfi-list::-webkit-scrollbar-thumb,\n.pfi-filter-list::-webkit-scrollbar-thumb,\n.pfi-cfg-body::-webkit-scrollbar-thumb {\n  background: var(--border-2);\n  border-radius: 4px;\n}\n\n/* \u2500\u2500 Tarjeta de widget \u2500\u2500 */\n.pfi-card {\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  margin-bottom: 4px;\n  transition: border-color .13s;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-card:hover { border-color: var(--border-2); }\n.pfi-card.pfi-expanded {\n  border-color: var(--focus);\n  box-shadow: 0 0 0 1px var(--focus) inset, 0 2px 8px rgba(0,0,0,.2);\n}\n.pfi-card-selected {\n  border-color: var(--accent) !important;\n  box-shadow: 0 0 0 2px var(--accent-bg);\n}\n\n.pfi-card-head {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  cursor: pointer;\n  user-select: none;\n}\n.pfi-card-head:hover { background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-card-head {\n  background: var(--surface-2);\n  border-bottom: 1px solid var(--border);\n}\n\n.pfi-card-icon {\n  width: 34px;\n  height: 34px;\n  border-radius: 7px;\n  background: var(--accent-bg);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  color: var(--accent);\n}\n.pfi-card-icon > svg {\n  width: 20px;\n  height: 20px;\n}\n.pfi-card-body { flex: 1; min-width: 0; }\n.pfi-card-wvar {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-card-id {\n  font-size: 10px;\n  color: var(--text-3);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  margin-top: 1px;\n  font-family: var(--mono);\n}\n\n/* Chevron */\n.pfi-chevron {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-3);\n  width: 24px;\n  height: 24px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: color .13s, transform .18s ease;\n}\n.pfi-chevron:hover { color: var(--text); background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-chevron { transform: rotate(90deg); color: var(--accent); }\n\n/* \u2500\u2500 Detalle del acorde\xF3n \u2500\u2500 */\n.pfi-card-detail {\n  padding: 10px 12px 12px;\n  animation: pfi-slide-in .2s ease-out;\n  overflow: hidden;\n}\n.pfi-card-detail[hidden] { display: none; }\n@keyframes pfi-slide-in {\n  from { opacity: 0; transform: translateY(-3px); }\n  to   { opacity: 1; transform: translateY(0); }\n}\n\n/* \u2500\u2500 Secciones del detalle \u2500\u2500 */\n.pfi-detail-section { margin-bottom: 14px; }\n.pfi-detail-section:last-child { margin-bottom: 0; }\n.pfi-detail-section h4 {\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n  color: var(--text-2);\n  margin: 0 0 7px 0;\n  padding-bottom: 5px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-detail-row {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 4px;\n  font-size: 12px;\n  align-items: baseline;\n}\n.pfi-detail-label { color: var(--text-2); min-width: 76px; flex-shrink: 0; }\n.pfi-detail-value { color: var(--text); word-break: break-all; }\n.pfi-mono { font-family: var(--mono); font-size: 11.5px; }\n.pfi-target-link {\n  color: var(--orange);\n  cursor: pointer;\n  text-decoration: underline;\n  text-decoration-style: dotted;\n}\n.pfi-target-link:hover { color: var(--yellow); }\n\n/* \u2500\u2500 Metadata \u2500\u2500 */\n.pfi-meta-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.pfi-meta-cell {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  padding: 5px 7px;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-size: 11px;\n  min-width: 0;\n}\n.pfi-meta-key {\n  color: var(--text-2);\n  font-size: 10px;\n  font-family: var(--mono);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-meta-true  { color: var(--green);  font-weight: 600; font-family: var(--mono); }\n.pfi-meta-false { color: var(--red);    font-weight: 600; font-family: var(--mono); }\n.pfi-meta-null  { color: var(--text-3); font-family: var(--mono); }\n.pfi-meta-text  { color: var(--yellow); font-family: var(--mono); word-break: break-all; }\n\n/* \u2500\u2500 Client API \u2014 botones ejecutables \u2500\u2500 */\n.pfi-actions-grid {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-action-btn {\n  background: var(--accent-bg);\n  border: 1px solid rgba(88,166,255,.25);\n  border-radius: var(--radius-sm);\n  padding: 4px 10px;\n  min-height: 28px;\n  color: var(--accent);\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-action-btn:hover {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: #fff;\n}\n.pfi-action-btn:active { transform: scale(.97); }\n.pfi-action-btn.pfi-action-btn-disabled,\n.pfi-action-btn[disabled] {\n  opacity: .4;\n  cursor: not-allowed;\n}\n.pfi-action-btn.pfi-action-btn-disabled:hover,\n.pfi-action-btn[disabled]:hover {\n  background: var(--accent-bg);\n  border-color: rgba(88,166,255,.25);\n  color: var(--accent);\n  transform: none;\n}\n.pfi-action-icon { display: flex; align-items: center; }\n\n/* Botones con argumentos */\n.pfi-api-arg-methods {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-mt { margin-top: 6px; }\n.pfi-api-method-btn {\n  background: var(--orange-bg);\n  border: 1px solid rgba(249,115,22,.25);\n  color: var(--orange);\n  padding: 4px 10px;\n  min-height: 28px;\n  border-radius: var(--radius-sm);\n  cursor: pointer;\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-api-method-btn:hover {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-api-method-btn.pfi-api-method-active {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-arity {\n  font-size: 10px;\n  background: rgba(0,0,0,.25);\n  border-radius: 3px;\n  padding: 0 3px;\n  margin-left: 1px;\n}\n\n/* \u2500\u2500 Mini-form de argumentos \u2500\u2500 */\n.pfi-api-form-host { margin-top: 8px; }\n.pfi-api-form {\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius);\n  padding: 10px;\n  margin-top: 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-api-form-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.pfi-api-form-title {\n  font-family: var(--mono);\n  font-size: 11px;\n  color: var(--orange);\n  word-break: break-all;\n  flex: 1;\n}\n.pfi-api-form-hint { font-size: 10.5px; color: var(--text-3); }\n.pfi-api-form-body { display: flex; flex-direction: column; gap: 6px; }\n.pfi-arg-row { display: flex; align-items: center; gap: 8px; }\n.pfi-arg-label { font-size: 10.5px; color: var(--text-2); min-width: 44px; font-family: var(--mono); }\n.pfi-arg-input {\n  flex: 1;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  font-family: var(--mono);\n  outline: none;\n  transition: border-color .13s;\n}\n.pfi-arg-input:focus { border-color: var(--orange); }\n.pfi-api-form-footer { display: flex; justify-content: flex-end; }\n\n/* \u2500\u2500 Botones secundarios / ghost \u2500\u2500 */\n.pfi-ghost-btn {\n  background: none;\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  padding: 3px 8px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  transition: background .13s, color .13s;\n}\n.pfi-ghost-btn:hover { background: var(--surface-2); color: var(--text); }\n\n/* Bot\xF3n ejecutar principal */\n.pfi-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  color: var(--green);\n  border-radius: var(--radius-sm);\n  padding: 5px 12px;\n  font-size: 11.5px;\n  font-weight: 600;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s;\n}\n.pfi-exec-btn:hover {\n  background: var(--green);\n  border-color: var(--green);\n  color: #fff;\n}\n\n/* \u2500\u2500 Resultado del form \u2500\u2500 */\n.pfi-api-result {\n  margin-top: 2px;\n  padding: 8px;\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  border: 1px solid;\n}\n.pfi-api-result[hidden] { display: none; }\n.pfi-api-result-pending { background: var(--yellow-bg); border-color: rgba(210,153,34,.3); color: var(--yellow); }\n.pfi-api-result-ok      { background: var(--green-bg);  border-color: rgba(63,185,80,.3);  color: var(--green); }\n.pfi-api-result-err     { background: var(--red-bg);    border-color: rgba(248,81,73,.3);  color: var(--red); }\n.pfi-api-result-header  { font-weight: 600; margin-bottom: 5px; }\n.pfi-api-result-actions { display: flex; gap: 6px; margin-top: 6px; }\n\n/* \u2500\u2500 Eventos \u2500\u2500 */\n.pfi-event-block {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 8px;\n  margin-bottom: 6px;\n}\n.pfi-event-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  margin-bottom: 5px;\n}\n.pfi-event-name {\n  font-weight: 600;\n  color: var(--pink);\n  font-size: 12px;\n  flex: 1;\n  font-family: var(--mono);\n  word-break: break-all;\n}\n.pfi-event-badge {\n  font-size: 9px;\n  padding: 1px 6px;\n  border-radius: 20px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n  font-weight: 600;\n  flex-shrink: 0;\n}\n.pfi-event-badge-inline  { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(88,166,255,.3); }\n.pfi-event-badge-jquery  { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(249,115,22,.3); }\n.pfi-event-raw {\n  font-size: 10px;\n  color: var(--text-3);\n  word-break: break-all;\n  margin-bottom: 6px;\n  font-family: var(--mono);\n  padding: 4px 6px;\n  background: var(--bg);\n  border-radius: 4px;\n  max-height: 56px;\n  overflow-y: auto;\n}\n.pfi-event-owner {\n  font-size: 10px;\n  color: var(--text-2);\n  font-family: var(--mono);\n  margin: 0 0 4px 4px;\n  word-break: break-all;\n}\n.pfi-events-empty { font-size: 11px; color: var(--text-3); font-style: italic; padding: 3px 0; }\n.pfi-hint {\n  font-size: 11px;\n  color: var(--yellow);\n  background: var(--yellow-bg);\n  border: 1px dashed rgba(210,153,34,.35);\n  border-radius: var(--radius-sm);\n  padding: 6px 8px;\n  margin-top: 6px;\n}\n.pfi-hint-clickable { cursor: pointer; }\n.pfi-hint-clickable:hover { background: rgba(210,153,34,.2); }\n\n/* \u2500\u2500 Tabla de par\xE1metros \u2500\u2500 */\n.pfi-param-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 11px;\n}\n.pfi-param-table th {\n  text-align: left;\n  color: var(--text-3);\n  border-bottom: 1px solid var(--border);\n  padding: 3px 4px;\n  font-weight: 600;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n}\n.pfi-param-table td {\n  padding: 3px 4px;\n  border-bottom: 1px solid var(--border);\n  color: var(--text);\n  font-family: var(--mono);\n}\n.pfi-param-table td:first-child { color: var(--yellow); font-weight: 700; }\n.pfi-param-table td:nth-child(2) { color: var(--accent); }\n.pfi-param-desc { color: var(--text-3) !important; font-size: 10px; font-family: var(--sans) !important; }\n.pfi-event-row { cursor: crosshair; transition: background .1s; }\n.pfi-event-row:hover,\n.pfi-event-row.pfi-event-row-active { background: rgba(210,153,34,.08); }\n\n/* \u2500\u2500 Bot\xF3n ejecutar evento \u2500\u2500 */\n.pfi-event-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  border-radius: 4px;\n  color: var(--green);\n  width: 22px;\n  height: 22px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: background .13s, color .13s;\n}\n.pfi-event-exec-btn:hover { background: var(--green); color: #fff; }\n\n/* \u2500\u2500 Overlay header compartido (config, modal) \u2500\u2500 */\n.pfi-overlay-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-overlay-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  flex: 1;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n\n/* \u2500\u2500 Panel de configuraci\xF3n \u2500\u2500 */\n.pfi-config-overlay {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  z-index: 11;\n  display: flex;\n  flex-direction: column;\n  animation: pfi-slide-in .15s ease-out;\n}\n.pfi-cfg-body {\n  flex: 1;\n  overflow-y: auto;\n  padding: 8px 0;\n}\n\n/* Secciones de config */\n.pfi-cfg-section {\n  padding: 8px 14px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-cfg-section:last-of-type { border-bottom: none; }\n.pfi-cfg-section-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 8px;\n  padding-top: 2px;\n}\n\n/* Filas de configuraci\xF3n */\n.pfi-cfg-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 7px 0;\n  gap: 12px;\n}\n.pfi-cfg-text { flex: 1; min-width: 0; }\n.pfi-cfg-label { font-size: 12.5px; color: var(--text); font-weight: 500; }\n.pfi-cfg-desc  { font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.3; }\n.pfi-cfg-control { flex-shrink: 0; }\n\n/* Color row */\n.pfi-cfg-color-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 5px 0 5px 12px;\n  gap: 10px;\n}\n.pfi-cfg-reset-row { padding: 5px 0; }\n\n/* Select */\n.pfi-select {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  font-family: var(--sans);\n  padding: 4px 8px;\n  outline: none;\n  cursor: pointer;\n  transition: border-color .13s;\n}\n.pfi-select:focus { border-color: var(--focus); }\n\n/* Color picker */\n.pfi-color-picker {\n  width: 36px;\n  height: 24px;\n  border: 1px solid var(--border-2);\n  border-radius: 4px;\n  padding: 0;\n  cursor: pointer;\n  -webkit-appearance: none;\n  appearance: none;\n  background: none;\n  overflow: hidden;\n}\n.pfi-color-picker::-webkit-color-swatch-wrapper { padding: 0; }\n.pfi-color-picker::-webkit-color-swatch { border: none; border-radius: 3px; }\n.pfi-color-picker::-moz-color-swatch { border: none; border-radius: 3px; }\n\n/* Toggle switch */\n.pfi-toggle {\n  position: relative;\n  display: inline-block;\n  width: 36px;\n  height: 20px;\n  flex-shrink: 0;\n  vertical-align: middle;\n}\n.pfi-toggle input {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  margin: 0;\n  opacity: 0;\n  cursor: pointer;\n  z-index: 1;\n  -webkit-appearance: none;\n  appearance: none;\n}\n.pfi-slider {\n  position: absolute;\n  inset: 0;\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: 20px;\n  pointer-events: none;\n  transition: background .2s, border-color .2s;\n}\n.pfi-slider::before {\n  content: '';\n  position: absolute;\n  box-sizing: border-box;\n  width: 14px;\n  height: 14px;\n  left: 2px;\n  top: 2px;\n  background: var(--text-2);\n  border-radius: 50%;\n  transition: transform .2s, background .2s;\n}\n.pfi-toggle input:checked + .pfi-slider { background: var(--accent); border-color: var(--accent); }\n.pfi-toggle input:checked + .pfi-slider::before { transform: translateX(16px); background: #fff; }\n\n/* About section */\n.pfi-cfg-about {\n  padding: 12px 14px;\n}\n.pfi-cfg-about-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 10px;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n}\n.pfi-cfg-about-row {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  font-size: 12px;\n  padding: 4px 0;\n  color: var(--text-2);\n}\n.pfi-link {\n  color: var(--accent);\n  text-decoration: none;\n  font-size: 12px;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n.pfi-link:hover { text-decoration: underline; }\n\n/* \u2500\u2500 Modal de resultado \u2500\u2500 */\n.pfi-result-modal {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  display: flex;\n  flex-direction: column;\n  z-index: 25;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-result-body {\n  flex: 1;\n  overflow: auto;\n  padding: 12px;\n}\n.pfi-result-pre {\n  margin: 0;\n  padding: 10px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-family: var(--mono);\n  font-size: 11.5px;\n  color: var(--text);\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n\n/* \u2500\u2500 Toast stack \u2500\u2500 */\n.pfi-toast-stack {\n  position: absolute;\n  bottom: 10px;\n  left: 10px;\n  right: 10px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  pointer-events: none;\n  z-index: 30;\n}\n.pfi-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  border-radius: var(--radius-sm);\n  border: 1px solid;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: 0 4px 16px rgba(0,0,0,.4);\n  animation: pfi-toast-in .22s ease-out;\n  word-break: break-word;\n}\n.pfi-toast.pfi-toast-leaving { animation: pfi-toast-out .28s ease-in forwards; }\n.pfi-toast-ok  { background: linear-gradient(var(--green-bg), var(--green-bg)), var(--surface); border-color: rgba(63,185,80,.55); color: var(--green); }\n.pfi-toast-err { background: linear-gradient(var(--red-bg), var(--red-bg)), var(--surface);   border-color: rgba(248,81,73,.55); color: var(--red); }\n.pfi-toast-text { flex: 1; }\n.pfi-toast-btn {\n  background: transparent;\n  border: 1px solid currentColor;\n  color: inherit;\n  border-radius: 4px;\n  padding: 2px 6px;\n  cursor: pointer;\n  font-size: 11px;\n  font-family: var(--sans);\n  opacity: .8;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n}\n.pfi-toast-btn:hover { opacity: 1; background: rgba(255,255,255,.08); }\n.pfi-toast-close { padding: 2px 4px; }\n\n@keyframes pfi-toast-in  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }\n@keyframes pfi-toast-out { to { opacity: 0; transform: translateY(6px); } }\n\n/* \u2500\u2500 Tooltips personalizados (atributo title) \u2500\u2500 */\n.pfi-tooltip {\n  position: absolute;\n  z-index: 50;\n  max-width: 240px;\n  background: var(--surface-2);\n  color: var(--text);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  line-height: 1.35;\n  font-family: var(--sans);\n  box-shadow: 0 4px 14px rgba(0,0,0,.45);\n  pointer-events: none;\n  white-space: normal;\n  word-break: break-word;\n  animation: pfi-fade-in .12s ease-out;\n}\n.pfi-tooltip[hidden] { display: none; }\n@keyframes pfi-fade-in { from { opacity: 0; } to { opacity: 1; } }\n\n/* \u2500\u2500 Drag \u2500\u2500 */\n.pfi-drag-handle { cursor: move; user-select: none; }\n";
+  var panel_default = "/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n   PrimeFaces Inspector \u2014 Estilos del panel (Shadow DOM)\n   Esta hoja se inyecta DENTRO del ShadowRoot del panel, por lo que\n   el CSS de la p\xE1gina no puede pisarla (ni al rev\xE9s). Los estilos\n   que se aplican a elementos de la p\xE1gina viven en page.css.\n   Tema oscuro por defecto; .pfi-theme-light invierte las variables\n   \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */\n\n/* \u2500\u2500 Variables del tema \u2500\u2500 */\n#pf-inspector-panel {\n  --bg:          #0d1117;\n  --surface:     #161b22;\n  --surface-2:   #21262d;\n  --border:      #30363d;\n  --border-2:    #444c56;\n  --focus:       #58a6ff;\n\n  --text:        #e6edf3;\n  --text-2:      #8b949e;\n  --text-3:      #484f58;\n\n  --accent:      #58a6ff;\n  --accent-bg:   rgba(88,166,255,.12);\n  --green:       #3fb950;\n  --green-bg:    rgba(63,185,80,.12);\n  --red:         #f85149;\n  --red-bg:      rgba(248,81,73,.12);\n  --yellow:      #d29922;\n  --yellow-bg:   rgba(210,153,34,.12);\n  --orange:      #f97316;\n  --orange-bg:   rgba(249,115,22,.12);\n  --pink:        #f778ba;\n\n  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Courier New', monospace;\n  --sans: 'Segoe UI', system-ui, -apple-system, sans-serif;\n  --radius: 8px;\n  --radius-sm: 5px;\n}\n\n#pf-inspector-panel.pfi-theme-light {\n  --bg:          #ffffff;\n  --surface:     #f6f8fa;\n  --surface-2:   #eaeef2;\n  --border:      #d0d7de;\n  --border-2:    #afb8c1;\n  --focus:       #0969da;\n\n  --text:        #1f2328;\n  --text-2:      #636c76;\n  --text-3:      #8c959f;\n\n  --accent:      #0969da;\n  --accent-bg:   rgba(9,105,218,.10);\n  --green:       #1a7f37;\n  --green-bg:    rgba(26,127,55,.10);\n  --red:         #d1242f;\n  --red-bg:      rgba(209,36,47,.10);\n  --yellow:      #9a6700;\n  --yellow-bg:   rgba(154,103,0,.10);\n  --orange:      #bc4c00;\n  --orange-bg:   rgba(188,76,0,.10);\n  --pink:        #bf4b8a;\n}\n\n/* \u2500\u2500 Panel principal \u2500\u2500 */\n#pf-inspector-panel {\n  position: fixed;\n  top: 10px;\n  right: 10px;\n  width: 390px;\n  max-height: calc(100vh - 20px);\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);\n  z-index: 2147483647;\n  font-family: var(--sans);\n  font-size: 13px;\n  color: var(--text);\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n#pf-inspector-panel * {\n  box-sizing: border-box;\n}\n\n/* \u2500\u2500 Header \u2500\u2500 */\n.pfi-header {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-logo {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n}\n.pfi-title {\n  flex: 1;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  letter-spacing: -.01em;\n}\n.pfi-count {\n  font-size: 11px;\n  color: var(--text-3);\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: 20px;\n  padding: 0 7px;\n  line-height: 18px;\n  margin-right: 2px;\n  font-variant-numeric: tabular-nums;\n}\n\n/* \u2500\u2500 Botones del header \u2500\u2500 */\n.pfi-header-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s, border-color .13s;\n  flex-shrink: 0;\n}\n.pfi-header-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n.pfi-header-btn.pfi-btn-active {\n  background: var(--accent-bg);\n  color: var(--accent);\n  border-color: var(--focus);\n}\n#pfi-btn-close:hover {\n  background: var(--red-bg);\n  color: var(--red);\n  border-color: rgba(248,81,73,.45);\n}\n\n/* \u2500\u2500 Bot\xF3n \xEDcono gen\xE9rico (overlays, forms) \u2500\u2500 */\n.pfi-icon-btn {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  width: 28px;\n  height: 28px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  transition: background .13s, color .13s;\n  flex-shrink: 0;\n}\n.pfi-icon-btn:hover {\n  background: var(--surface-2);\n  color: var(--text);\n  border-color: var(--border);\n}\n\n/* \u2500\u2500 Info bar \u2500\u2500 */\n.pfi-info-bar {\n  display: flex;\n  align-items: flex-start;\n  gap: 8px;\n  padding: 5px 12px;\n  font-size: 11px;\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-info-bar:empty { display: none; }\n\n.pfi-info-bar.pfi-info-ok {\n  background: var(--green-bg);\n  color: var(--green);\n}\n.pfi-info-bar.pfi-info-warn {\n  background: var(--yellow-bg);\n  color: var(--yellow);\n}\n.pfi-info-icon {\n  display: flex;\n  align-items: center;\n  flex-shrink: 0;\n  margin-top: 1px;\n}\n.pfi-info-lines {\n  display: flex;\n  flex-direction: column;\n  gap: 1px;\n  flex: 1;\n  min-width: 0;\n}\n.pfi-info-main  { font-weight: 600; }\n.pfi-info-sub   { opacity: .8; }\n.pfi-info-muted { color: var(--text-3); opacity: 1; }\n.pfi-info-warn-text { color: var(--yellow); }\n\n/* \u2500\u2500 Barra de b\xFAsqueda \u2500\u2500 */\n.pfi-toolbar {\n  display: flex;\n  gap: 6px;\n  padding: 8px 10px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n  position: relative;\n}\n.pfi-search-wrap {\n  flex: 1;\n  position: relative;\n  min-width: 0;\n}\n.pfi-search-icon {\n  position: absolute;\n  left: 9px;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 15px;\n  height: 15px;\n  color: var(--text-3);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  pointer-events: none;\n}\n.pfi-search {\n  width: 100%;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 10px 0 32px;\n  height: 30px;\n  color: var(--text);\n  font-size: 12px;\n  font-family: var(--sans);\n  outline: none;\n  transition: border-color .15s;\n}\n.pfi-search:focus { border-color: var(--focus); }\n.pfi-search::placeholder { color: var(--text-3); }\n\n/* \u2500\u2500 Multi-filtro \u2500\u2500 */\n.pfi-multi-filter {\n  position: relative;\n  flex-shrink: 0;\n  height: 30px;\n}\n.pfi-filter-btn {\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 0 8px;\n  height: 30px;\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  min-width: 100px;\n  max-width: 140px;\n  transition: border-color .13s, color .13s;\n}\n.pfi-filter-btn:hover { border-color: var(--border-2); color: var(--text); }\n.pfi-filter-btn > span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n.pfi-filter-dropdown {\n  position: absolute;\n  right: 0;\n  top: calc(100% + 4px);\n  width: 220px;\n  max-height: 260px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  box-shadow: 0 8px 24px rgba(0,0,0,.4);\n  z-index: 10;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-filter-dropdown[hidden] { display: none; }\n.pfi-filter-list { flex: 1; overflow-y: auto; padding: 4px 0; }\n.pfi-filter-row {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 5px 10px;\n  cursor: pointer;\n  font-size: 12px;\n  color: var(--text);\n}\n.pfi-filter-row:hover { background: var(--surface-2); }\n.pfi-filter-row > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }\n.pfi-filter-row > span > svg { flex-shrink: 0; color: var(--accent); }\n.pfi-filter-row input[type=checkbox] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }\n.pfi-filter-empty { text-align: center; color: var(--text-3); font-size: 11px; padding: 8px; }\n.pfi-filter-footer {\n  border-top: 1px solid var(--border);\n  padding: 4px 8px;\n  text-align: right;\n}\n\n/* \u2500\u2500 Lista de widgets \u2500\u2500 */\n.pfi-list {\n  flex: 1;\n  overflow-y: auto;\n  padding: 6px;\n  min-height: 60px;\n}\n.pfi-empty {\n  text-align: center;\n  padding: 32px 16px;\n  color: var(--text-3);\n  font-size: 12px;\n}\n\n/* Scrollbars */\n.pfi-list::-webkit-scrollbar,\n.pfi-filter-list::-webkit-scrollbar,\n.pfi-cfg-body::-webkit-scrollbar,\n.pfi-overlay-body::-webkit-scrollbar {\n  width: 4px;\n}\n.pfi-list::-webkit-scrollbar-track,\n.pfi-filter-list::-webkit-scrollbar-track,\n.pfi-cfg-body::-webkit-scrollbar-track {\n  background: transparent;\n}\n.pfi-list::-webkit-scrollbar-thumb,\n.pfi-filter-list::-webkit-scrollbar-thumb,\n.pfi-cfg-body::-webkit-scrollbar-thumb {\n  background: var(--border-2);\n  border-radius: 4px;\n}\n\n/* \u2500\u2500 Tarjeta de widget \u2500\u2500 */\n.pfi-card {\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius);\n  margin-bottom: 4px;\n  transition: border-color .13s;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.pfi-card:hover { border-color: var(--border-2); }\n.pfi-card.pfi-expanded {\n  border-color: var(--focus);\n  box-shadow: 0 0 0 1px var(--focus) inset, 0 2px 8px rgba(0,0,0,.2);\n}\n.pfi-card-selected {\n  border-color: var(--accent) !important;\n  box-shadow: 0 0 0 2px var(--accent-bg);\n}\n\n.pfi-card-head {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  cursor: pointer;\n  user-select: none;\n}\n.pfi-card-head:hover { background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-card-head {\n  background: var(--surface-2);\n  border-bottom: 1px solid var(--border);\n}\n\n.pfi-card-icon {\n  width: 34px;\n  height: 34px;\n  border-radius: 7px;\n  background: var(--accent-bg);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n  color: var(--accent);\n}\n.pfi-card-icon > svg {\n  width: 20px;\n  height: 20px;\n}\n.pfi-card-body { flex: 1; min-width: 0; }\n.pfi-card-wvar {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-card-id {\n  font-size: 10px;\n  color: var(--text-3);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  margin-top: 1px;\n  font-family: var(--mono);\n}\n\n/* Chevron */\n.pfi-chevron {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-3);\n  width: 24px;\n  height: 24px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: color .13s, transform .18s ease;\n}\n.pfi-chevron:hover { color: var(--text); background: var(--surface-2); }\n.pfi-card.pfi-expanded .pfi-chevron { transform: rotate(90deg); color: var(--accent); }\n\n/* \u2500\u2500 Detalle del acorde\xF3n \u2500\u2500 */\n.pfi-card-detail {\n  padding: 10px 12px 12px;\n  animation: pfi-slide-in .2s ease-out;\n  overflow: hidden;\n}\n.pfi-card-detail[hidden] { display: none; }\n@keyframes pfi-slide-in {\n  from { opacity: 0; transform: translateY(-3px); }\n  to   { opacity: 1; transform: translateY(0); }\n}\n\n/* \u2500\u2500 Secciones del detalle \u2500\u2500 */\n.pfi-detail-section { margin-bottom: 14px; }\n.pfi-detail-section:last-child { margin-bottom: 0; }\n.pfi-detail-section h4 {\n  font-size: 10px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: .06em;\n  color: var(--text-2);\n  margin: 0 0 7px 0;\n  padding-bottom: 5px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-detail-row {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 4px;\n  font-size: 12px;\n  align-items: baseline;\n}\n.pfi-detail-label { color: var(--text-2); min-width: 76px; flex-shrink: 0; }\n.pfi-detail-value { color: var(--text); word-break: break-all; }\n.pfi-mono { font-family: var(--mono); font-size: 11.5px; }\n.pfi-target-link {\n  color: var(--orange);\n  cursor: pointer;\n  text-decoration: underline;\n  text-decoration-style: dotted;\n}\n.pfi-target-link:hover { color: var(--yellow); }\n\n/* \u2500\u2500 Metadata \u2500\u2500 */\n.pfi-meta-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px;\n}\n.pfi-meta-cell {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  padding: 5px 7px;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-size: 11px;\n  min-width: 0;\n}\n.pfi-meta-key {\n  color: var(--text-2);\n  font-size: 10px;\n  font-family: var(--mono);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-meta-true  { color: var(--green);  font-weight: 600; font-family: var(--mono); }\n.pfi-meta-false { color: var(--red);    font-weight: 600; font-family: var(--mono); }\n.pfi-meta-null  { color: var(--text-3); font-family: var(--mono); }\n.pfi-meta-text  { color: var(--yellow); font-family: var(--mono); word-break: break-all; }\n\n/* \u2500\u2500 Client API \u2014 botones ejecutables \u2500\u2500 */\n.pfi-actions-grid {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-action-btn {\n  background: var(--accent-bg);\n  border: 1px solid rgba(88,166,255,.25);\n  border-radius: var(--radius-sm);\n  padding: 4px 10px;\n  min-height: 28px;\n  color: var(--accent);\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-action-btn:hover {\n  background: var(--accent);\n  border-color: var(--accent);\n  color: #fff;\n}\n.pfi-action-btn:active { transform: scale(.97); }\n.pfi-action-btn.pfi-action-btn-disabled,\n.pfi-action-btn[disabled] {\n  opacity: .4;\n  cursor: not-allowed;\n}\n.pfi-action-btn.pfi-action-btn-disabled:hover,\n.pfi-action-btn[disabled]:hover {\n  background: var(--accent-bg);\n  border-color: rgba(88,166,255,.25);\n  color: var(--accent);\n  transform: none;\n}\n.pfi-action-icon { display: flex; align-items: center; }\n\n/* Botones con argumentos */\n.pfi-api-arg-methods {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 5px;\n}\n.pfi-mt { margin-top: 6px; }\n.pfi-api-method-btn {\n  background: var(--orange-bg);\n  border: 1px solid rgba(249,115,22,.25);\n  color: var(--orange);\n  padding: 4px 10px;\n  min-height: 28px;\n  border-radius: var(--radius-sm);\n  cursor: pointer;\n  font-size: 11.5px;\n  font-weight: 500;\n  font-family: var(--mono);\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s, color .13s;\n}\n.pfi-api-method-btn:hover {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-api-method-btn.pfi-api-method-active {\n  background: var(--orange);\n  border-color: var(--orange);\n  color: #fff;\n}\n.pfi-arity {\n  font-size: 10px;\n  background: rgba(0,0,0,.25);\n  border-radius: 3px;\n  padding: 0 3px;\n  margin-left: 1px;\n}\n\n/* \u2500\u2500 Mini-form de argumentos \u2500\u2500 */\n.pfi-api-form-host { margin-top: 8px; }\n.pfi-api-form {\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius);\n  padding: 10px;\n  margin-top: 8px;\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-api-form-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 8px;\n}\n.pfi-api-form-title {\n  font-family: var(--mono);\n  font-size: 11px;\n  color: var(--orange);\n  word-break: break-all;\n  flex: 1;\n}\n.pfi-api-form-hint { font-size: 10.5px; color: var(--text-3); }\n.pfi-api-form-body { display: flex; flex-direction: column; gap: 6px; }\n.pfi-arg-row { display: flex; align-items: center; gap: 8px; }\n.pfi-arg-label { font-size: 10.5px; color: var(--text-2); min-width: 44px; font-family: var(--mono); }\n.pfi-arg-input {\n  flex: 1;\n  background: var(--bg);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  font-family: var(--mono);\n  outline: none;\n  transition: border-color .13s;\n}\n.pfi-arg-input:focus { border-color: var(--orange); }\n.pfi-api-form-footer { display: flex; justify-content: flex-end; }\n\n/* \u2500\u2500 Botones secundarios / ghost \u2500\u2500 */\n.pfi-ghost-btn {\n  background: none;\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  font-size: 11px;\n  font-family: var(--sans);\n  padding: 3px 8px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  transition: background .13s, color .13s;\n}\n.pfi-ghost-btn:hover { background: var(--surface-2); color: var(--text); }\n\n/* Bot\xF3n ejecutar principal */\n.pfi-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  color: var(--green);\n  border-radius: var(--radius-sm);\n  padding: 5px 12px;\n  font-size: 11.5px;\n  font-weight: 600;\n  font-family: var(--sans);\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, border-color .13s;\n}\n.pfi-exec-btn:hover {\n  background: var(--green);\n  border-color: var(--green);\n  color: #fff;\n}\n\n/* \u2500\u2500 Resultado del form \u2500\u2500 */\n.pfi-api-result {\n  margin-top: 2px;\n  padding: 8px;\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  border: 1px solid;\n}\n.pfi-api-result[hidden] { display: none; }\n.pfi-api-result-pending { background: var(--yellow-bg); border-color: rgba(210,153,34,.3); color: var(--yellow); }\n.pfi-api-result-ok      { background: var(--green-bg);  border-color: rgba(63,185,80,.3);  color: var(--green); }\n.pfi-api-result-err     { background: var(--red-bg);    border-color: rgba(248,81,73,.3);  color: var(--red); }\n.pfi-api-result-header  { font-weight: 600; margin-bottom: 5px; }\n.pfi-api-result-actions { display: flex; gap: 6px; margin-top: 6px; }\n\n/* \u2500\u2500 Eventos \u2500\u2500 */\n.pfi-event-block {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  padding: 8px;\n  margin-bottom: 6px;\n}\n.pfi-event-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  margin-bottom: 5px;\n}\n.pfi-event-name {\n  font-weight: 600;\n  color: var(--pink);\n  font-size: 12px;\n  flex: 1;\n  font-family: var(--mono);\n  word-break: break-all;\n}\n.pfi-event-badge {\n  font-size: 9px;\n  padding: 1px 6px;\n  border-radius: 20px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n  font-weight: 600;\n  flex-shrink: 0;\n}\n.pfi-event-badge-inline  { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(88,166,255,.3); }\n.pfi-event-badge-jquery  { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(249,115,22,.3); }\n.pfi-event-raw {\n  font-size: 10px;\n  color: var(--text-3);\n  word-break: break-all;\n  margin-bottom: 6px;\n  font-family: var(--mono);\n  padding: 4px 6px;\n  background: var(--bg);\n  border-radius: 4px;\n  max-height: 56px;\n  overflow-y: auto;\n}\n.pfi-event-owner {\n  font-size: 10px;\n  color: var(--text-2);\n  font-family: var(--mono);\n  margin: 0 0 4px 4px;\n  word-break: break-all;\n}\n.pfi-events-empty { font-size: 11px; color: var(--text-3); font-style: italic; padding: 3px 0; }\n.pfi-hint {\n  font-size: 11px;\n  color: var(--yellow);\n  background: var(--yellow-bg);\n  border: 1px dashed rgba(210,153,34,.35);\n  border-radius: var(--radius-sm);\n  padding: 6px 8px;\n  margin-top: 6px;\n}\n.pfi-hint-clickable { cursor: pointer; }\n.pfi-hint-clickable:hover { background: rgba(210,153,34,.2); }\n\n/* \u2500\u2500 Tabla de par\xE1metros \u2500\u2500 */\n.pfi-param-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 11px;\n}\n.pfi-param-table th {\n  text-align: left;\n  color: var(--text-3);\n  border-bottom: 1px solid var(--border);\n  padding: 3px 4px;\n  font-weight: 600;\n  font-size: 10px;\n  text-transform: uppercase;\n  letter-spacing: .04em;\n}\n.pfi-param-table td {\n  padding: 3px 4px;\n  border-bottom: 1px solid var(--border);\n  color: var(--text);\n  font-family: var(--mono);\n}\n.pfi-param-table td:first-child { color: var(--yellow); font-weight: 700; }\n.pfi-param-table td:nth-child(2) { color: var(--accent); }\n.pfi-param-desc { color: var(--text-3) !important; font-size: 10px; font-family: var(--sans) !important; }\n.pfi-event-row { cursor: crosshair; transition: background .1s; }\n.pfi-event-row:hover,\n.pfi-event-row.pfi-event-row-active { background: rgba(210,153,34,.08); }\n\n/* \u2500\u2500 Bot\xF3n ejecutar evento \u2500\u2500 */\n.pfi-event-exec-btn {\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  border-radius: 4px;\n  color: var(--green);\n  width: 22px;\n  height: 22px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  padding: 0;\n  flex-shrink: 0;\n  transition: background .13s, color .13s;\n}\n.pfi-event-exec-btn:hover { background: var(--green); color: #fff; }\n\n/* \u2500\u2500 Overlay header compartido (config, modal) \u2500\u2500 */\n.pfi-overlay-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 10px 12px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-overlay-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--text);\n  flex: 1;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n\n/* \u2500\u2500 Panel de configuraci\xF3n \u2500\u2500 */\n.pfi-config-overlay {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  z-index: 11;\n  display: flex;\n  flex-direction: column;\n  animation: pfi-slide-in .15s ease-out;\n}\n.pfi-cfg-body {\n  flex: 1;\n  overflow-y: auto;\n  padding: 8px 0;\n}\n\n/* Secciones de config */\n.pfi-cfg-section {\n  padding: 8px 14px;\n  border-bottom: 1px solid var(--border);\n}\n.pfi-cfg-section:last-of-type { border-bottom: none; }\n.pfi-cfg-section-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 8px;\n  padding-top: 2px;\n}\n\n/* Filas de configuraci\xF3n */\n.pfi-cfg-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 7px 0;\n  gap: 12px;\n}\n.pfi-cfg-text { flex: 1; min-width: 0; }\n.pfi-cfg-label { font-size: 12.5px; color: var(--text); font-weight: 500; }\n.pfi-cfg-desc  { font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.3; }\n.pfi-cfg-control { flex-shrink: 0; }\n\n/* Color row */\n.pfi-cfg-color-row {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 5px 0 5px 12px;\n  gap: 10px;\n}\n.pfi-cfg-reset-row { padding: 5px 0; }\n\n/* Select */\n.pfi-select {\n  background: var(--surface-2);\n  border: 1px solid var(--border);\n  color: var(--text);\n  border-radius: var(--radius-sm);\n  font-size: 11.5px;\n  font-family: var(--sans);\n  padding: 4px 8px;\n  outline: none;\n  cursor: pointer;\n  transition: border-color .13s;\n}\n.pfi-select:focus { border-color: var(--focus); }\n\n/* Color picker */\n.pfi-color-picker {\n  width: 36px;\n  height: 24px;\n  border: 1px solid var(--border-2);\n  border-radius: 4px;\n  padding: 0;\n  cursor: pointer;\n  -webkit-appearance: none;\n  appearance: none;\n  background: none;\n  overflow: hidden;\n}\n.pfi-color-picker::-webkit-color-swatch-wrapper { padding: 0; }\n.pfi-color-picker::-webkit-color-swatch { border: none; border-radius: 3px; }\n.pfi-color-picker::-moz-color-swatch { border: none; border-radius: 3px; }\n\n/* Toggle switch */\n.pfi-toggle {\n  position: relative;\n  display: inline-block;\n  width: 36px;\n  height: 20px;\n  flex-shrink: 0;\n  vertical-align: middle;\n}\n.pfi-toggle input {\n  position: absolute;\n  inset: 0;\n  width: 100%;\n  height: 100%;\n  margin: 0;\n  opacity: 0;\n  cursor: pointer;\n  z-index: 1;\n  -webkit-appearance: none;\n  appearance: none;\n}\n.pfi-slider {\n  position: absolute;\n  inset: 0;\n  background: var(--surface-2);\n  border: 1px solid var(--border-2);\n  border-radius: 20px;\n  pointer-events: none;\n  transition: background .2s, border-color .2s;\n}\n.pfi-slider::before {\n  content: '';\n  position: absolute;\n  box-sizing: border-box;\n  width: 14px;\n  height: 14px;\n  left: 2px;\n  top: 2px;\n  background: var(--text-2);\n  border-radius: 50%;\n  transition: transform .2s, background .2s;\n}\n.pfi-toggle input:checked + .pfi-slider { background: var(--accent); border-color: var(--accent); }\n.pfi-toggle input:checked + .pfi-slider::before { transform: translateX(16px); background: #fff; }\n\n/* About section */\n.pfi-cfg-about {\n  padding: 12px 14px;\n}\n.pfi-cfg-about-title {\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: .07em;\n  color: var(--text-3);\n  margin-bottom: 10px;\n  display: flex;\n  align-items: center;\n  gap: 5px;\n}\n.pfi-cfg-about-row {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  font-size: 12px;\n  padding: 4px 0;\n  color: var(--text-2);\n}\n.pfi-link {\n  color: var(--accent);\n  text-decoration: none;\n  font-size: 12px;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n}\n.pfi-link:hover { text-decoration: underline; }\n\n/* \u2500\u2500 Monitor (timeline Ajax + eventos en vivo) \u2500\u2500 */\n.pfi-monitor-overlay {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  z-index: 12;\n  display: flex;\n  flex-direction: column;\n  animation: pfi-slide-in .15s ease-out;\n}\n.pfi-mon-tabs {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 6px 10px;\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  flex-shrink: 0;\n}\n.pfi-mon-tab {\n  background: none;\n  border: 1px solid transparent;\n  border-radius: var(--radius-sm);\n  color: var(--text-2);\n  font-size: 11.5px;\n  font-family: var(--sans);\n  font-weight: 500;\n  padding: 4px 10px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  transition: background .13s, color .13s, border-color .13s;\n}\n.pfi-mon-tab:hover { background: var(--surface-2); color: var(--text); }\n.pfi-mon-tab.pfi-mon-tab-active {\n  background: var(--accent-bg);\n  color: var(--accent);\n  border-color: rgba(88,166,255,.3);\n}\n.pfi-mon-tab-count {\n  font-size: 10px;\n  color: var(--text-3);\n  font-variant-numeric: tabular-nums;\n}\n.pfi-mon-tab-count:empty { display: none; }\n.pfi-mon-live-btn {\n  margin-left: auto;\n  background: var(--green-bg);\n  border: 1px solid rgba(63,185,80,.3);\n  border-radius: var(--radius-sm);\n  color: var(--green);\n  font-size: 11px;\n  font-family: var(--sans);\n  font-weight: 600;\n  padding: 4px 9px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  transition: background .13s, color .13s;\n}\n.pfi-mon-live-btn:hover { background: var(--green); color: #fff; }\n.pfi-mon-live-btn.pfi-mon-live-active {\n  background: var(--red-bg);\n  border-color: rgba(248,81,73,.4);\n  color: var(--red);\n}\n.pfi-mon-live-btn.pfi-mon-live-active:hover { background: var(--red); color: #fff; }\n\n.pfi-mon-body {\n  flex: 1;\n  overflow-y: auto;\n  padding: 6px;\n}\n.pfi-mon-body::-webkit-scrollbar { width: 4px; }\n.pfi-mon-body::-webkit-scrollbar-track { background: transparent; }\n.pfi-mon-body::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }\n\n.pfi-mon-row {\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  margin-bottom: 4px;\n  overflow: hidden;\n}\n.pfi-mon-row.pfi-mon-expanded { border-color: var(--focus); }\n.pfi-mon-row-head {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 6px 8px;\n  cursor: pointer;\n  user-select: none;\n  min-width: 0;\n}\n.pfi-mon-event-row .pfi-mon-row-head { cursor: default; }\n.pfi-mon-row-head:hover { background: var(--surface-2); }\n.pfi-mon-status {\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n.pfi-mon-st-ok      { background: var(--green); }\n.pfi-mon-st-err     { background: var(--red); }\n.pfi-mon-st-pending { background: var(--yellow); animation: pfi-mon-pulse 1s ease-in-out infinite; }\n@keyframes pfi-mon-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }\n\n.pfi-mon-main {\n  flex: 1;\n  min-width: 0;\n  font-size: 11.5px;\n  color: var(--text);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.pfi-mon-event-badge {\n  font-size: 9.5px;\n  padding: 1px 6px;\n  border-radius: 20px;\n  background: var(--accent-bg);\n  color: var(--accent);\n  border: 1px solid rgba(88,166,255,.3);\n  font-family: var(--mono);\n  flex-shrink: 0;\n}\n.pfi-mon-duration {\n  font-size: 10.5px;\n  color: var(--text-2);\n  font-variant-numeric: tabular-nums;\n  flex-shrink: 0;\n}\n.pfi-mon-ts {\n  font-size: 10px;\n  color: var(--text-3);\n  font-family: var(--mono);\n  font-variant-numeric: tabular-nums;\n  flex-shrink: 0;\n}\n.pfi-mon-detail {\n  padding: 8px 10px 10px;\n  border-top: 1px solid var(--border);\n  animation: pfi-slide-in .15s ease-out;\n}\n.pfi-mon-payload { margin-top: 6px; }\n.pfi-mon-payload > summary {\n  font-size: 11px;\n  color: var(--text-2);\n  cursor: pointer;\n  user-select: none;\n  padding: 3px 0;\n}\n.pfi-mon-payload > summary:hover { color: var(--text); }\n.pfi-mon-payload .pfi-result-pre {\n  margin-top: 4px;\n  max-height: 180px;\n  overflow: auto;\n  font-size: 10.5px;\n}\n.pfi-mon-evname {\n  font-size: 11.5px;\n  font-weight: 600;\n  color: var(--pink);\n  flex-shrink: 0;\n}\n.pfi-mon-event-detail {\n  padding: 0 8px 6px 29px;\n  font-size: 10.5px;\n  color: var(--text-3);\n  word-break: break-all;\n}\n\n/* \u2500\u2500 Modal de resultado \u2500\u2500 */\n.pfi-result-modal {\n  position: absolute;\n  inset: 0;\n  background: var(--bg);\n  display: flex;\n  flex-direction: column;\n  z-index: 25;\n  animation: pfi-slide-in .18s ease-out;\n}\n.pfi-result-body {\n  flex: 1;\n  overflow: auto;\n  padding: 12px;\n}\n.pfi-result-pre {\n  margin: 0;\n  padding: 10px;\n  background: var(--surface);\n  border: 1px solid var(--border);\n  border-radius: var(--radius-sm);\n  font-family: var(--mono);\n  font-size: 11.5px;\n  color: var(--text);\n  white-space: pre-wrap;\n  word-break: break-word;\n}\n\n/* \u2500\u2500 Toast stack \u2500\u2500 */\n.pfi-toast-stack {\n  position: absolute;\n  bottom: 10px;\n  left: 10px;\n  right: 10px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  pointer-events: none;\n  z-index: 30;\n}\n.pfi-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 10px;\n  border-radius: var(--radius-sm);\n  border: 1px solid;\n  font-size: 12px;\n  line-height: 1.4;\n  box-shadow: 0 4px 16px rgba(0,0,0,.4);\n  animation: pfi-toast-in .22s ease-out;\n  word-break: break-word;\n}\n.pfi-toast.pfi-toast-leaving { animation: pfi-toast-out .28s ease-in forwards; }\n.pfi-toast-ok  { background: linear-gradient(var(--green-bg), var(--green-bg)), var(--surface); border-color: rgba(63,185,80,.55); color: var(--green); }\n.pfi-toast-err { background: linear-gradient(var(--red-bg), var(--red-bg)), var(--surface);   border-color: rgba(248,81,73,.55); color: var(--red); }\n.pfi-toast-text { flex: 1; }\n.pfi-toast-btn {\n  background: transparent;\n  border: 1px solid currentColor;\n  color: inherit;\n  border-radius: 4px;\n  padding: 2px 6px;\n  cursor: pointer;\n  font-size: 11px;\n  font-family: var(--sans);\n  opacity: .8;\n  flex-shrink: 0;\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n}\n.pfi-toast-btn:hover { opacity: 1; background: rgba(255,255,255,.08); }\n.pfi-toast-close { padding: 2px 4px; }\n\n@keyframes pfi-toast-in  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }\n@keyframes pfi-toast-out { to { opacity: 0; transform: translateY(6px); } }\n\n/* \u2500\u2500 Tooltips personalizados (atributo title) \u2500\u2500 */\n.pfi-tooltip {\n  position: absolute;\n  z-index: 50;\n  max-width: 240px;\n  background: var(--surface-2);\n  color: var(--text);\n  border: 1px solid var(--border-2);\n  border-radius: var(--radius-sm);\n  padding: 5px 8px;\n  font-size: 11px;\n  line-height: 1.35;\n  font-family: var(--sans);\n  box-shadow: 0 4px 14px rgba(0,0,0,.45);\n  pointer-events: none;\n  white-space: normal;\n  word-break: break-word;\n  animation: pfi-fade-in .12s ease-out;\n}\n.pfi-tooltip[hidden] { display: none; }\n@keyframes pfi-fade-in { from { opacity: 0; } to { opacity: 1; } }\n\n/* \u2500\u2500 Drag \u2500\u2500 */\n.pfi-drag-handle { cursor: move; user-select: none; }\n";
 
   // src/content/ui/panel.js
   function mountShadowHost() {
@@ -1642,6 +1923,7 @@
       <span class="pfi-title">${escHtml(t("title"))}</span>
       <span class="pfi-count" id="pfi-count"></span>
       <button class="pfi-header-btn" id="pfi-btn-select"  title="${escAttr(t("btnSelect"))}">${icon("crosshair", 14)}</button>
+      <button class="pfi-header-btn" id="pfi-btn-monitor" title="${escAttr(t("btnMonitor"))}">${icon("activity", 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-config"  title="${escAttr(t("btnConfig"))}">${icon("settings", 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-refresh" title="${escAttr(t("btnRefresh"))}">${icon("rotate-ccw", 14)}</button>
       <button class="pfi-header-btn" id="pfi-btn-close"   title="${escAttr(t("btnClose"))}">${icon("x", 14)}</button>
@@ -1665,6 +1947,7 @@
     state.panelEl.querySelector("#pfi-btn-select").addEventListener("click", () => {
       toggleSelectionMode({ expandCard: buildCallbacks().expandCard });
     });
+    state.panelEl.querySelector("#pfi-btn-monitor").addEventListener("click", toggleMonitor);
     wireSearchEvents(state.panelEl, buildCallbacks());
     makeDraggable(state.panelEl, state.panelEl.querySelector(".pfi-drag-handle"));
     initTooltips(state.panelEl);
@@ -1677,6 +1960,10 @@
   }
   function closePanel() {
     if (state.selectionMode) deactivateSelectionMode();
+    if (state.eventMonitorOn) {
+      stopEventMonitor();
+      state.eventMonitorOn = false;
+    }
     if (state.panelEl) {
       state.panelEl.style.display = "none";
       clearHighlight();
@@ -1709,6 +1996,19 @@
     renderList(buildCallbacks());
     renderHeaderInfo();
     togglePfDependentUi();
+  }
+  function openWidgetDetail(widgetVar) {
+    if (!state.panelEl) return;
+    const card = state.panelEl.querySelector(`.pfi-card[data-widget-var="${cssEsc(widgetVar)}"]`);
+    if (!card) {
+      state.searchTerm = "";
+      const input = state.panelEl.querySelector("#pfi-search");
+      if (input) input.value = "";
+      state.selectedTypes.clear();
+      applyFilters();
+      renderList(buildCallbacks());
+    }
+    buildCallbacks().expandCard(widgetVar, true);
   }
 
   // src/content/index.js
@@ -1743,6 +2043,22 @@
       } else {
         showToast({ success: false, text: t("execErr", data.error) });
       }
+    }, inspectContextTarget = function() {
+      const target = lastContextTarget;
+      const hadData = state.widgetsData.length > 0;
+      createPanel();
+      let tries = 12;
+      const attempt = () => {
+        const widget = target && target.nodeType === Node.ELEMENT_NODE ? findWidgetForElement(target) : null;
+        if (widget) {
+          openWidgetDetail(widget.widgetVar);
+        } else if (--tries > 0 && !hadData && state.widgetsData.length === 0) {
+          setTimeout(attempt, 200);
+        } else {
+          showToast({ success: false, text: t("ctxNoWidget") });
+        }
+      };
+      attempt();
     }, onGlobalKeyDown = function(e) {
       if (!state.panelEl || state.panelEl.style.display === "none") return;
       if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.key === "Control" || e.key === "Shift")) {
@@ -1754,7 +2070,7 @@
     }, onGlobalKeyUp = function(e) {
       if (!e.ctrlKey || !e.shiftKey) state.ctrlShiftFired = false;
     };
-    handleExecResult2 = handleExecResult, onGlobalKeyDown2 = onGlobalKeyDown, onGlobalKeyUp2 = onGlobalKeyUp;
+    handleExecResult2 = handleExecResult, inspectContextTarget2 = inspectContextTarget, onGlobalKeyDown2 = onGlobalKeyDown, onGlobalKeyUp2 = onGlobalKeyUp;
     window.__pfInspectorLoaded = true;
     loadConfig(() => {
       applyDynamicColors();
@@ -1782,6 +2098,15 @@
         case MSG.EXEC_RESULT:
           handleExecResult(event.data.data);
           break;
+        case MSG.AJAX_START:
+          onAjaxStart(event.data.data);
+          break;
+        case MSG.AJAX_DONE:
+          onAjaxDone(event.data.data);
+          break;
+        case MSG.EVENT_FIRED:
+          onEventFired(event.data.data);
+          break;
       }
     });
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -1790,8 +2115,16 @@
         else createPanel();
         sendResponse({ ok: true });
       }
+      if (msg && msg.action === "inspectContextTarget") {
+        inspectContextTarget();
+        sendResponse({ ok: true });
+      }
       return true;
     });
+    let lastContextTarget = null;
+    document.addEventListener("contextmenu", (e) => {
+      lastContextTarget = e.composedPath && e.composedPath()[0] || e.target;
+    }, true);
     const observer = new MutationObserver((mutations) => {
       if (!config.highlightUpdates) return;
       mutations.forEach((mut) => {
@@ -1809,6 +2142,7 @@
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
   var handleExecResult2;
+  var inspectContextTarget2;
   var onGlobalKeyDown2;
   var onGlobalKeyUp2;
 })();
